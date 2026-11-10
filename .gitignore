@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+
+# Producción y compilación (Vite y TypeScript)
+dist/
+*.tsbuildinfo
+
+# Variables de entorno locales (Vite)
+.env*.local
+
+# Despliegue (Vercel CLI / vinculación local)
+.vercel/
+
+# Registros y cobertura de pruebas (npm y Vitest)
+npm-debug.log*
+coverage/
+
+# Editores y sistema operativo
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Documentos locales no versionados
+prompt-inicial.txt

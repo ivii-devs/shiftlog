@@ -1,0 +1,19 @@
+{
+  "name": "Shift Log",
+  "short_name": "Shift Log",
+  "description": "Registro ágil de turnos de trabajo y control de ingresos netos y brutos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "orientation": "portrait-primary",
+  "lang": "es-ES",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,183 @@
+@import "tailwindcss";
+
+:root {
+  /* 2.1 Tokens de Rol Estructural y Acción (Dark Mode OLED Exclusivo) */
+  --color-background: #050505;
+  --color-surface: #0C0C0E;
+  --color-surface-muted: #141418;
+  --color-border: #1F1F24;
+  --color-border-strong: #2E2E36;
+  --color-text: #FAFAFA;
+  --color-text-secondary: #A1A1AA;
+  --color-text-muted: #52525B;
+  --color-action: #FAFAFA;
+  --color-action-hover: #E4E4E7;
+  --color-action-ink: #09090B;
+  --color-selected: #1C1C22;
+  --color-focus: #FAFAFA;
+
+  /* 2.2 Señales Semánticas Financieras y de Estado */
+  --color-success: #10B981;
+  --color-success-quiet: #052E16;
+  --color-success-line: #065F46;
+
+  --color-warning: #F59E0B;
+  --color-warning-quiet: #451A03;
+  --color-warning-line: #78350F;
+
+  --color-danger: #EF4444;
+  --color-danger-quiet: #450A0A;
+  --color-danger-line: #7F1D1D;
+
+  --color-info: #3B82F6;
+  --color-info-quiet: #172554;
+  --color-info-line: #1E40AF;
+
+  /* 2.3 Paleta Curada para Eventos / Categorías */
+  --color-cat-emerald: #10B981;
+  --color-cat-blue: #3B82F6;
+  --color-cat-indigo: #6366F1;
+  --color-cat-violet: #8B5CF6;
+  --color-cat-amber: #F59E0B;
+  --color-cat-rose: #F43F5E;
+  --color-cat-cyan: #06B6D4;
+  --color-cat-lime: #84CC16;
+
+  /* 3.1 Familias Tipográficas */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* 4. Radios de esquina contenidos */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+@theme inline {
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-surface-muted: var(--color-surface-muted);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-action: var(--color-action);
+  --color-action-hover: var(--color-action-hover);
+  --color-action-ink: var(--color-action-ink);
+  --color-selected: var(--color-selected);
+  --color-focus: var(--color-focus);
+
+  --color-success: var(--color-success);
+  --color-success-quiet: var(--color-success-quiet);
+  --color-success-line: var(--color-success-line);
+
+  --color-warning: var(--color-warning);
+  --color-warning-quiet: var(--color-warning-quiet);
+  --color-warning-line: var(--color-warning-line);
+
+  --color-danger: var(--color-danger);
+  --color-danger-quiet: var(--color-danger-quiet);
+  --color-danger-line: var(--color-danger-line);
+
+  --color-info: var(--color-info);
+  --color-info-quiet: var(--color-info-quiet);
+  --color-info-line: var(--color-info-line);
+
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+/* Capa 3: WebKit iOS Standalone Viewport Pinning Invariable */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  inset: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--color-background);
+}
+
+/* Ergonomía de desplazamiento vertical en WebKit */
+.scroll-container {
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+.scroll-container * {
+  touch-action: pan-y !important;
+}
+
+/* Números tabulares obligatorios en cifras */
+.tabular-nums,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Prevención de auto-zoom en iOS Safari */
+input,
+select,
+textarea {
+  font-size: 16px;
+  color-scheme: dark;
+}
+
+/* Respeto a reducción de movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Soporte para exportación de informe PDF mediante hoja de impresión limpia */
+@media print {
+  html,
+  body,
+  #root {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    background-color: #ffffff !important;
+    color: #09090b !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .only-print {
+    display: block !important;
+  }
+}
