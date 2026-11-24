@@ -7,7 +7,7 @@ import {
   generateCycleCsv,
   generateCycleTxtReport,
 } from '../../domain/exporters';
-import type { PaymentStatus, ShiftRecord, WorkEvent } from '../../domain/types';
+import type { ShiftRecord, WorkEvent } from '../../domain/types';
 import { useShiftStore } from '../../store/useShiftStore';
 
 interface ExportReportsCardProps {
@@ -16,8 +16,6 @@ interface ExportReportsCardProps {
   events?: WorkEvent[];
   selectedEventId?: string;
   onChangeEventId?: (eventId: string) => void;
-  paymentFilter?: 'all' | PaymentStatus;
-  onChangePaymentFilter?: (status: 'all' | PaymentStatus) => void;
 }
 
 export const ExportReportsCard: React.FC<ExportReportsCardProps> = ({
@@ -26,8 +24,6 @@ export const ExportReportsCard: React.FC<ExportReportsCardProps> = ({
   events = [],
   selectedEventId = 'all',
   onChangeEventId,
-  paymentFilter = 'all',
-  onChangePaymentFilter,
 }) => {
   const showToast = useShiftStore((s) => s.showToast);
 
@@ -74,36 +70,30 @@ export const ExportReportsCard: React.FC<ExportReportsCardProps> = ({
         Exportar informe del ciclo ({analytics.cycle.label})
       </h2>
       <p className="mt-0.5 text-xs text-text-secondary">
-        Descarga el desglose completo o filtrado en hoja de cálculo Excel, documento PDF o texto plano para enviar por mensajería.
+        Descarga el desglose completo o filtrado por categoría en hoja de cálculo Excel, documento PDF o texto plano.
       </p>
 
-      {events.length > 0 && onChangeEventId && onChangePaymentFilter && (
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {events.length > 0 && onChangeEventId && (
+        <div className="mt-3">
+          <label
+            htmlFor="export-category-filter"
+            className="block text-xs font-medium text-text-secondary"
+          >
+            Filtrar informe por categoría
+          </label>
           <select
+            id="export-category-filter"
             aria-label="Filtrar informe por categoría"
             value={selectedEventId}
             onChange={(e) => onChangeEventId(e.target.value)}
-            className="min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="mt-1.5 min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <option value="all">Todas las categorías</option>
             {events.map((ev) => (
               <option key={ev.id} value={ev.id}>
-                {ev.name}
+                {ev.name} {ev.archived ? '(Archivado)' : ''}
               </option>
             ))}
-          </select>
-
-          <select
-            aria-label="Filtrar informe por estado de cobro"
-            value={paymentFilter}
-            onChange={(e) =>
-              onChangePaymentFilter(e.target.value as 'all' | PaymentStatus)
-            }
-            className="min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <option value="all">Todos los estados de cobro</option>
-            <option value="pending">Solo pendientes de cobro</option>
-            <option value="paid">Solo cobrados</option>
           </select>
         </div>
       )}

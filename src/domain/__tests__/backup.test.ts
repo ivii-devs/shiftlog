@@ -26,6 +26,7 @@ const sampleSettings: AppSettings = {
   cycleStartDay: 1,
   monthlyGoalNetEuros: 600,
   monthlyGoalHours: 40,
+  monthlyGoalOverrides: {},
 };
 
 function createSampleShift(id: string, date: string): ShiftRecord {
@@ -49,15 +50,14 @@ function createSampleShift(id: string, date: string): ShiftRecord {
     fixedBonus: 0,
     expenseAdjustment: 0,
     note: 'Festival de verano',
-    paymentStatus: 'paid',
     snapshot,
     computed,
     createdAt: '2026-05-10T00:00:00Z',
   };
 }
 
-describe('backup validation, merge & exporters (T-06)', () => {
-  it('rejects malformed or structurally invalid JSON files with descriptive Spanish errors (AC16)', () => {
+describe('backup validation, merge & exporters (T-01)', () => {
+  it('rejects malformed or structurally invalid JSON files with descriptive Spanish errors', () => {
     expect(validateBackupJson('').ok).toBe(false);
     expect(validateBackupJson('{malformed').ok).toBe(false);
     expect(validateBackupJson(JSON.stringify({ version: 2 })).ok).toBe(false);
@@ -114,9 +114,68 @@ describe('backup validation, merge & exporters (T-06)', () => {
       settings: sampleSettings,
     });
     expect(validateBackupJson(JSON.stringify(badTemplateDb)).ok).toBe(false);
+
+    // Invalid monthlyGoalOverrides key & value
+    const badOverrideKey = {
+      version: 1,
+      events: [sampleEvent],
+      shifts: [],
+      settings: {
+        cycleStartDay: 1,
+        monthlyGoalNetEuros: 600,
+        monthlyGoalHours: 40,
+        monthlyGoalOverrides: {
+          '2026-13': { netEuros: 800, hours: 50 },
+        },
+      },
+    };
+    expect(validateBackupJson(JSON.stringify(badOverrideKey)).ok).toBe(false);
+
+    const badOverrideValue = {
+      version: 1,
+      events: [sampleEvent],
+      shifts: [],
+      settings: {
+        cycleStartDay: 1,
+        monthlyGoalNetEuros: 600,
+        monthlyGoalHours: 40,
+        monthlyGoalOverrides: {
+          '2026-11': { netEuros: -50, hours: null },
+        },
+      },
+    };
+    expect(validateBackupJson(JSON.stringify(badOverrideValue)).ok).toBe(false);
   });
 
-  it('validates a legitimate backup, merges records without duplicates, and preserves shift snapshots when event rates change (AC9, AC16, AC17)', () => {
+  it('accepts legacy backups containing paymentStatus and lacking monthlyGoalOverrides without data loss (AC12)', () => {
+    const legacyShift = {
+      ...createSampleShift('s-legacy', '2026-05-10'),
+      paymentStatus: 'paid',
+    };
+    const legacyPayload = {
+      version: 1,
+      exportedAt: '2026-05-11T10:00:00.000Z',
+      events: [sampleEvent],
+      shifts: [legacyShift],
+      settings: {
+        cycleStartDay: 1,
+        monthlyGoalNetEuros: 700,
+        monthlyGoalHours: 45,
+      },
+    };
+
+    const res = validateBackupJson(JSON.stringify(legacyPayload));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    expect(res.data.events).toHaveLength(1);
+    expect(res.data.shifts).toHaveLength(1);
+    expect(res.data.shifts[0].id).toBe('s-legacy');
+    expect('paymentStatus' in res.data.shifts[0]).toBe(false);
+    expect(res.data.settings.monthlyGoalOverrides).toEqual({});
+  });
+
+  it('validates and merges databases including monthlyGoalOverrides preserving local overrides and shift snapshots', () => {
     const s1 = createSampleShift('s-1', '2026-05-10'); // snapshot netRateSnap = 14
     const s2 = createSampleShift('s-2', '2026-05-12');
     const updatedEventInBackup: WorkEvent = {
@@ -127,7 +186,13 @@ describe('backup validation, merge & exporters (T-06)', () => {
     const db = buildBackupDatabase({
       events: [updatedEventInBackup],
       shifts: [s2],
-      settings: sampleSettings,
+      settings: {
+        ...sampleSettings,
+        monthlyGoalOverrides: {
+          '2026-11': { netEuros: 450, hours: 30 },
+          '2026-12': { netEuros: 1100, hours: null },
+        },
+      },
     });
 
     const validation = validateBackupJson(JSON.stringify(db));
@@ -137,8 +202,13 @@ describe('backup validation, merge & exporters (T-06)', () => {
     const merged = mergeDatabases(
       {
         events: [sampleEvent],
-        shifts: [s1, s2], // s2 exists in both
-        settings: sampleSettings,
+        shifts: [s1, s2],
+        settings: {
+          ...sampleSettings,
+          monthlyGoalOverrides: {
+            '2026-11': { netEuros: 500, hours: 35 }, // local override wins on conflict
+          },
+        },
       },
       validation.data
     );
@@ -146,12 +216,15 @@ describe('backup validation, merge & exporters (T-06)', () => {
     expect(merged.events).toHaveLength(1);
     expect(merged.events[0].netRate).toBe(22);
     expect(merged.shifts).toHaveLength(2);
-    // Existing shifts keep their historical 14 €/h snapshot (112 € totalNetAmount)
     expect(merged.shifts.find((s) => s.id === 's-1')?.snapshot.netRateSnap).toBe(14);
     expect(merged.shifts.find((s) => s.id === 's-1')?.computed.totalNetAmount).toBe(112);
+    expect(merged.settings.monthlyGoalOverrides).toEqual({
+      '2026-11': { netEuros: 500, hours: 35 },
+      '2026-12': { netEuros: 1100, hours: null },
+    });
   });
 
-  it('generates UTF-8 BOM CSV with Spanish decimal formatting and TXT summary (AC18)', () => {
+  it('generates UTF-8 BOM CSV and TXT summary without payment status and with effective hourly net rate (AC04)', () => {
     const s1 = createSampleShift('s-1', '2026-05-10');
     const cycle = getCycleForDate('2026-05-10', 1);
     const analytics = computeCycleAnalytics({
@@ -159,16 +232,37 @@ describe('backup validation, merge & exporters (T-06)', () => {
       allShifts: [s1],
       events: [sampleEvent],
       settings: sampleSettings,
+      referenceDate: '2026-05-15',
     });
 
     const csv = generateCycleCsv(cycle, [s1], analytics);
     expect(csv.startsWith('\uFEFF')).toBe(true);
     expect(csv).toContain('Montaje Escenario');
     expect(csv).toContain('112,00'); // 8h * 14€/h = 112,00
+    expect(csv).toContain('Tarifa media neta (€/h);14,00');
+    expect(csv).not.toContain('Estado cobro');
+    expect(csv).not.toContain('Importe Cobrado');
+    expect(csv).not.toContain('Importe Pendiente');
 
     const txt = generateCycleTxtReport(cycle, [s1], analytics);
     expect(txt).toContain('INFORME DE TURNOS - SHIFT LOG');
     expect(txt).toContain('112,00 €');
+    expect(txt).toContain('14,00 €/h');
     expect(txt).toContain('Festival de verano');
+    expect(txt).not.toContain('Cobrado');
+    expect(txt).not.toContain('Pendiente');
+
+    // Empty cycle or empty filtered export must report 0,00 €/h (not an unrelated event's rate)
+    const emptyAnalytics = computeCycleAnalytics({
+      cycle,
+      allShifts: [],
+      events: [sampleEvent],
+      settings: sampleSettings,
+      referenceDate: '2026-05-15',
+    });
+    const emptyCsv = generateCycleCsv(cycle, [], emptyAnalytics);
+    const emptyTxt = generateCycleTxtReport(cycle, [], emptyAnalytics);
+    expect(emptyCsv).toContain('Tarifa media neta (€/h);0,00');
+    expect(emptyTxt).toContain('0,00 €/h');
   });
 });

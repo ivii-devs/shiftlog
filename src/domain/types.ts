@@ -38,7 +38,6 @@ export const CATEGORY_COLOR_HEX: Record<CategoryColor, string> = {
 
 export type RoundingMode = 'none' | '15m' | '30m';
 export type ShiftRateType = 'normal' | 'holiday' | 'night' | 'overtime';
-export type PaymentStatus = 'pending' | 'paid';
 
 export const SHIFT_RATE_LABELS: Record<ShiftRateType, string> = {
   normal: 'Normal',
@@ -114,16 +113,21 @@ export interface ShiftRecord {
   fixedBonus: number;
   expenseAdjustment: number;
   note: string;
-  paymentStatus: PaymentStatus;
   snapshot: ShiftHistoricalSnapshot;
   computed: ShiftComputedTotals;
   createdAt: string;
+}
+
+export interface MonthlyGoalConfig {
+  netEuros: number | null;
+  hours: number | null;
 }
 
 export interface AppSettings {
   cycleStartDay: number;
   monthlyGoalNetEuros: number | null;
   monthlyGoalHours: number | null;
+  monthlyGoalOverrides?: Record<string, MonthlyGoalConfig>;
 }
 
 export interface ShiftLogDatabase {

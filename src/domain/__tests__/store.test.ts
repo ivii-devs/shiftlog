@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { getCycleForDate } from '../cycles';
 import { getTodayIsoLocal } from '../formatters';
-import { useShiftStore } from '../../store/useShiftStore';
+import { hydratePersistedShiftState, useShiftStore } from '../../store/useShiftStore';
 
-describe('useShiftStore state & actions (T-07)', () => {
+describe('useShiftStore state, actions, monthly goals & migration (T-01)', () => {
   beforeEach(() => {
     useShiftStore.getState().resetStoreForTests();
   });
 
-  it('creates shift via 1-touch quick template with event default break and respects break updates (AC4, AC5)', () => {
+  it('creates shift via 1-touch quick template with event default break and respects break updates', () => {
     const store = useShiftStore.getState();
     const created = store.addShiftFromTemplate(
       'ev-default-1',
@@ -17,10 +16,10 @@ describe('useShiftStore state & actions (T-07)', () => {
     );
     expect(created).not.toBeNull();
     expect(created?.breakMinutes).toBe(30);
-    expect(created?.computed.billableMinutes).toBe(480); // 08:00-16:30 (510) - 30 = 480 (8h)
-    expect(created?.computed.totalNetAmount).toBe(100); // 8h * 12.50 €/h
+    expect(created?.computed.billableMinutes).toBe(480);
+    expect(created?.computed.totalNetAmount).toBe(100);
+    expect('paymentStatus' in (created ?? {})).toBe(false);
 
-    // Updating event defaultBreakMinutes to 15 updates subsequent quick template shifts
     useShiftStore.getState().updateEvent('ev-default-1', { defaultBreakMinutes: 15 });
     const with15mBreak = useShiftStore
       .getState()
@@ -28,7 +27,6 @@ describe('useShiftStore state & actions (T-07)', () => {
     expect(with15mBreak?.breakMinutes).toBe(15);
     expect(with15mBreak?.computed.billableMinutes).toBe(495);
 
-    // Disabling hasUnpaidBreak sets breakMinutes to 0 for subsequent quick template shifts
     useShiftStore.getState().updateEvent('ev-default-1', { hasUnpaidBreak: false });
     const withNoBreak = useShiftStore
       .getState()
@@ -37,7 +35,7 @@ describe('useShiftStore state & actions (T-07)', () => {
     expect(withNoBreak?.computed.billableMinutes).toBe(510);
   });
 
-  it('clones shift to today, duplicates to specific date, and repeats across multiple dates (AC7)', () => {
+  it('clones shift to today, duplicates to specific date, and repeats across multiple dates', () => {
     const store = useShiftStore.getState();
     const base = store.addShift({
       eventId: 'ev-default-1',
@@ -64,7 +62,7 @@ describe('useShiftStore state & actions (T-07)', () => {
     expect(useShiftStore.getState().shifts).toHaveLength(1 + 1 + 1 + 3);
   });
 
-  it('keeps past shift amounts immutable when event rate is updated later (AC9)', () => {
+  it('keeps past shift amounts immutable when event rate is updated later', () => {
     const store = useShiftStore.getState();
     const shift = store.addShift({
       eventId: 'ev-default-1',
@@ -73,17 +71,14 @@ describe('useShiftStore state & actions (T-07)', () => {
       endTime: '16:00',
       breakMinutes: 0,
     });
-    expect(shift?.computed.totalNetAmount).toBe(100); // 8h * 12.50 €/h
+    expect(shift?.computed.totalNetAmount).toBe(100);
 
-    // Update event rate to 25 €/h
     useShiftStore.getState().updateEvent('ev-default-1', { netRate: 25, grossRate: 30 });
 
-    // Existing shift remains at 100 €
     const savedShift = useShiftStore.getState().shifts.find((s) => s.id === shift?.id);
     expect(savedShift?.computed.totalNetAmount).toBe(100);
     expect(savedShift?.snapshot.netRateSnap).toBe(12.5);
 
-    // Editing note on existing shift without refreshing rates still preserves 12.50 €/h
     if (savedShift) {
       useShiftStore.getState().updateShift(savedShift.id, {
         eventId: savedShift.eventId,
@@ -95,7 +90,6 @@ describe('useShiftStore state & actions (T-07)', () => {
         fixedBonus: savedShift.fixedBonus,
         expenseAdjustment: savedShift.expenseAdjustment,
         note: 'Nota editada',
-        paymentStatus: savedShift.paymentStatus,
       });
     }
     const afterNoteEdit = useShiftStore.getState().shifts.find((s) => s.id === shift?.id);
@@ -103,26 +97,97 @@ describe('useShiftStore state & actions (T-07)', () => {
     expect(afterNoteEdit?.note).toBe('Nota editada');
   });
 
-  it('marks an entire cycle as paid or pending in bulk (AC11)', () => {
-    const store = useShiftStore.getState();
-    store.addShift({
-      eventId: 'ev-default-1',
-      date: '2026-05-05',
-      startTime: '08:00',
-      endTime: '16:00',
+  it('sets, disables, and clears per-month goal overrides without resetting activeCycleAnchor (AC01, AC02, AC03)', () => {
+    useShiftStore.getState().setCycleForDate('2026-12-10');
+    const anchorBefore = useShiftStore.getState().activeCycleAnchor;
+    expect(anchorBefore).toEqual({ year: 2026, month: 11 });
+
+    // Updating base goals does not reset activeCycleAnchor
+    useShiftStore.getState().updateSettings({
+      monthlyGoalNetEuros: 750,
+      monthlyGoalHours: 50,
     });
-    store.addShift({
-      eventId: 'ev-default-1',
-      date: '2026-05-12',
-      startTime: '08:00',
-      endTime: '16:00',
+    expect(useShiftStore.getState().activeCycleAnchor).toEqual({ year: 2026, month: 11 });
+
+    // Setting custom override for November & disabling for January
+    useShiftStore.getState().setCycleGoalOverride('2026-11', {
+      netEuros: 400,
+      hours: 30,
+    });
+    useShiftStore.getState().setCycleGoalOverride('2027-01', {
+      netEuros: null,
+      hours: 0, // sanitized to null
+    });
+    expect(useShiftStore.getState().activeCycleAnchor).toEqual({ year: 2026, month: 11 });
+    expect(useShiftStore.getState().settings.monthlyGoalOverrides).toEqual({
+      '2026-11': { netEuros: 400, hours: 30 },
+      '2027-01': { netEuros: null, hours: null },
     });
 
-    const cycle = getCycleForDate('2026-05-10', 1);
-    const count = useShiftStore.getState().setCyclePaymentStatus(cycle, 'paid');
-    expect(count).toBe(2);
-    expect(
-      useShiftStore.getState().shifts.every((s) => s.paymentStatus === 'paid')
-    ).toBe(true);
+    // Clearing November override restores inheritance
+    useShiftStore.getState().clearCycleGoalOverride('2026-11');
+    expect(useShiftStore.getState().settings.monthlyGoalOverrides).toEqual({
+      '2027-01': { netEuros: null, hours: null },
+    });
+
+    // Invalid keys are ignored safely
+    useShiftStore.getState().setCycleGoalOverride('2026-99', {
+      netEuros: 500,
+      hours: 30,
+    });
+    expect(useShiftStore.getState().settings.monthlyGoalOverrides).toEqual({
+      '2027-01': { netEuros: null, hours: null },
+    });
+  });
+
+  it('silently migrates persisted localStorage data stripping legacy paymentStatus without losing records (AC12)', () => {
+    const store = useShiftStore.getState();
+    const sample = store.addShift({
+      eventId: 'ev-default-1',
+      date: '2026-11-05',
+      startTime: '08:00',
+      endTime: '16:00',
+      breakMinutes: 0,
+    });
+    expect(sample).not.toBeNull();
+    if (!sample) return;
+
+    const legacyPersisted = {
+      events: store.events,
+      shifts: [{ ...sample, paymentStatus: 'paid' }],
+      settings: {
+        cycleStartDay: 1,
+        monthlyGoalNetEuros: 800,
+        monthlyGoalHours: 50,
+      },
+    };
+
+    const hydrated = hydratePersistedShiftState(
+      legacyPersisted,
+      useShiftStore.getState()
+    );
+    expect(hydrated.events).toHaveLength(store.events.length);
+    expect(hydrated.shifts).toHaveLength(1);
+    expect(hydrated.shifts[0].id).toBe(sample.id);
+    expect('paymentStatus' in hydrated.shifts[0]).toBe(false);
+    expect(hydrated.settings.monthlyGoalOverrides).toEqual({});
+
+    // Corrupted monthlyGoalOverrides entries are sanitized rather than crashing
+    const hydratedWithMalformedOverrides = hydratePersistedShiftState(
+      {
+        ...legacyPersisted,
+        settings: {
+          ...legacyPersisted.settings,
+          monthlyGoalOverrides: {
+            'bad-key': { netEuros: 500, hours: 30 },
+            '2026-11': { netEuros: 725, hours: -10 },
+          },
+        },
+      },
+      useShiftStore.getState()
+    );
+    expect(hydratedWithMalformedOverrides.settings.monthlyGoalOverrides).toEqual({
+      '2026-11': { netEuros: 725, hours: null },
+    });
   });
 });

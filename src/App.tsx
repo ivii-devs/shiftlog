@@ -3,6 +3,7 @@ import { CalendarView } from './components/calendar/CalendarView';
 import { AppShell } from './components/layout/AppShell';
 import type { AppTab } from './components/layout/BottomNav';
 import { SettingsView } from './components/settings/SettingsView';
+import { CycleGoalSheet } from './components/shifts/CycleGoalSheet';
 import { CycleSummaryHero } from './components/shifts/CycleSummaryHero';
 import { QuickTemplatesBar } from './components/shifts/QuickTemplatesBar';
 import { RepeatShiftSheet } from './components/shifts/RepeatShiftSheet';
@@ -13,7 +14,7 @@ import { StatsView } from './components/stats/StatsView';
 import { Toast } from './components/ui/Toast';
 import { computeCycleAnalytics } from './domain/analytics';
 import { filterShiftsByCycle, getCycleByAnchor } from './domain/cycles';
-import type { PaymentStatus, ShiftRecord } from './domain/types';
+import type { ShiftRecord } from './domain/types';
 import { useShiftStore } from './store/useShiftStore';
 
 export const App: React.FC = () => {
@@ -29,13 +30,11 @@ export const App: React.FC = () => {
     undefined
   );
 
+  const [goalSheetOpen, setGoalSheetOpen] = useState(false);
   const [repeatSheetOpen, setRepeatSheetOpen] = useState(false);
   const [repeatingShift, setRepeatingShift] = useState<ShiftRecord | null>(null);
 
   const [exportEventId, setExportEventId] = useState<string>('all');
-  const [exportPaymentFilter, setExportPaymentFilter] = useState<'all' | PaymentStatus>(
-    'all'
-  );
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -75,15 +74,13 @@ export const App: React.FC = () => {
   const exportShifts = useMemo(() => {
     return cycleShifts.filter((s) => {
       if (exportEventId !== 'all' && s.eventId !== exportEventId) return false;
-      if (exportPaymentFilter !== 'all' && s.paymentStatus !== exportPaymentFilter)
-        return false;
       return true;
     });
-  }, [cycleShifts, exportEventId, exportPaymentFilter]);
+  }, [cycleShifts, exportEventId]);
 
   const exportAnalytics = useMemo(
     () =>
-      exportEventId === 'all' && exportPaymentFilter === 'all'
+      exportEventId === 'all'
         ? analytics
         : computeCycleAnalytics({
             cycle: activeCycle,
@@ -91,15 +88,7 @@ export const App: React.FC = () => {
             events,
             settings,
           }),
-    [
-      activeCycle,
-      analytics,
-      events,
-      exportEventId,
-      exportPaymentFilter,
-      exportShifts,
-      settings,
-    ]
+    [activeCycle, analytics, events, exportEventId, exportShifts, settings]
   );
 
   const handleOpenNewShift = () => {
@@ -137,7 +126,7 @@ export const App: React.FC = () => {
             <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 pb-10">
               <CycleSummaryHero
                 analytics={analytics}
-                onOpenNewShift={handleOpenNewShift}
+                onEditGoal={() => setGoalSheetOpen(true)}
               />
               <QuickTemplatesBar />
               <ShiftList
@@ -160,19 +149,18 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'stats' && (
-          <StatsView
-            analytics={analytics}
+          <StatsView analytics={analytics} events={events} />
+        )}
+
+        {activeTab === 'settings' && (
+          <SettingsView
             exportAnalytics={exportAnalytics}
-            cycleShifts={exportShifts}
+            exportShifts={exportShifts}
             events={events}
             selectedEventId={exportEventId}
             onChangeEventId={setExportEventId}
-            paymentFilter={exportPaymentFilter}
-            onChangePaymentFilter={setExportPaymentFilter}
           />
         )}
-
-        {activeTab === 'settings' && <SettingsView />}
       </AppShell>
 
       <ShiftFormSheet
@@ -180,6 +168,12 @@ export const App: React.FC = () => {
         onOpenChange={setShiftFormOpen}
         editingShift={editingShift}
         initialDate={initialShiftDate}
+      />
+
+      <CycleGoalSheet
+        open={goalSheetOpen}
+        onOpenChange={setGoalSheetOpen}
+        analytics={analytics}
       />
 
       <RepeatShiftSheet

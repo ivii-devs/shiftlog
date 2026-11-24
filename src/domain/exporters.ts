@@ -2,6 +2,7 @@ import type { CycleAnalytics } from './analytics';
 import {
   formatCurrency,
   formatDecimalEs,
+  formatHourlyRate,
   formatMinutes,
   formatNumericDateEs,
   formatPercentage,
@@ -41,7 +42,6 @@ export function generateCycleCsv(
     'Gasto o suplido (€)',
     'Total Neto (€)',
     'Total Bruto (€)',
-    'Estado cobro',
     'Nota',
   ];
 
@@ -71,7 +71,6 @@ export function generateCycleCsv(
       formatDecimalEs(s.expenseAdjustment, 2),
       formatDecimalEs(s.computed.totalNetAmount, 2),
       formatDecimalEs(s.computed.totalGrossAmount, 2),
-      s.paymentStatus === 'paid' ? 'Cobrado' : 'Pendiente',
       escapeCsvCell(s.note || ''),
     ];
     rows.push(row.join(';'));
@@ -79,13 +78,16 @@ export function generateCycleCsv(
 
   rows.push('');
   rows.push(`Resumen del ciclo;${escapeCsvCell(cycle.label)}`);
-  rows.push(`Periodo;${formatNumericDateEs(cycle.startDate)} a ${formatNumericDateEs(cycle.endDate)}`);
+  rows.push(
+    `Periodo;${formatNumericDateEs(cycle.startDate)} a ${formatNumericDateEs(cycle.endDate)}`
+  );
   rows.push(`Turnos registrados;${analytics.totalShifts}`);
   rows.push(`Tiempo total computable;${formatMinutes(analytics.totalBillableMinutes)}`);
   rows.push(`Total Neto (€);${formatDecimalEs(analytics.totalNetEarned, 2)}`);
   rows.push(`Total Bruto (€);${formatDecimalEs(analytics.totalGrossEarned, 2)}`);
-  rows.push(`Importe Cobrado (€);${formatDecimalEs(analytics.paidNetAmount, 2)}`);
-  rows.push(`Importe Pendiente (€);${formatDecimalEs(analytics.pendingNetAmount, 2)}`);
+  rows.push(
+    `Tarifa media neta (€/h);${formatDecimalEs(analytics.actualHourlyNetRate, 2)}`
+  );
 
   return BOM + rows.join('\r\n');
 }
@@ -97,15 +99,22 @@ export function generateCycleTxtReport(
 ): string {
   const lines: string[] = [];
   lines.push(`INFORME DE TURNOS - SHIFT LOG`);
-  lines.push(`Ciclo: ${cycle.label} (${formatNumericDateEs(cycle.startDate)} al ${formatNumericDateEs(cycle.endDate)})`);
+  lines.push(
+    `Ciclo: ${cycle.label} (${formatNumericDateEs(cycle.startDate)} al ${formatNumericDateEs(cycle.endDate)})`
+  );
   lines.push(`--------------------------------------------------`);
   lines.push(`RESUMEN EJECUTIVO`);
   lines.push(`Total neto ganado:    ${formatCurrency(analytics.totalNetEarned)}`);
   lines.push(`Total bruto estimado: ${formatCurrency(analytics.totalGrossEarned)}`);
-  lines.push(`Retención estimada:   ${formatCurrency(analytics.grossNetDifference)} (${formatPercentage(analytics.estimatedWithholdingPct)})`);
-  lines.push(`Tiempo computable:    ${formatMinutes(analytics.totalBillableMinutes)} (${analytics.totalShifts} turnos)`);
-  lines.push(`Cobrado:              ${formatCurrency(analytics.paidNetAmount)}`);
-  lines.push(`Pendiente de cobro:   ${formatCurrency(analytics.pendingNetAmount)}`);
+  lines.push(
+    `Retención estimada:   ${formatCurrency(analytics.grossNetDifference)} (${formatPercentage(analytics.estimatedWithholdingPct)})`
+  );
+  lines.push(
+    `Tiempo computable:    ${formatMinutes(analytics.totalBillableMinutes)} (${analytics.totalShifts} turnos)`
+  );
+  lines.push(
+    `Tarifa media neta:    ${formatHourlyRate(analytics.actualHourlyNetRate)}`
+  );
 
   if (analytics.categoryBreakdown.length > 0) {
     lines.push('');
@@ -127,7 +136,6 @@ export function generateCycleTxtReport(
       return a.startTime.localeCompare(b.startTime);
     });
     for (const s of sorted) {
-      const statusLabel = s.paymentStatus === 'paid' ? 'Cobrado' : 'Pendiente';
       const extras: string[] = [];
       if (s.rateType !== 'normal') {
         extras.push(SHIFT_RATE_LABELS[s.rateType]);
@@ -141,7 +149,7 @@ export function generateCycleTxtReport(
       const extraStr = extras.length > 0 ? ` [${extras.join(', ')}]` : '';
       const noteStr = s.note ? ` - Nota: ${s.note}` : '';
       lines.push(
-        `${formatNumericDateEs(s.date)} | ${s.startTime}-${s.endTime} (${formatMinutes(s.computed.billableMinutes)}) | ${s.snapshot.eventNameSnap}${extraStr} | ${formatCurrency(s.computed.totalNetAmount)} (${statusLabel})${noteStr}`
+        `${formatNumericDateEs(s.date)} | ${s.startTime}-${s.endTime} (${formatMinutes(s.computed.billableMinutes)}) | ${s.snapshot.eventNameSnap}${extraStr} | ${formatCurrency(s.computed.totalNetAmount)}${noteStr}`
       );
     }
   }

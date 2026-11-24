@@ -6,7 +6,7 @@ import {
   formatShortDateEs,
   round2,
 } from '../../domain/formatters';
-import type { PaymentStatus, ShiftRecord, WorkEvent } from '../../domain/types';
+import type { ShiftRecord, WorkEvent } from '../../domain/types';
 import { EmptyState } from '../ui/EmptyState';
 import { ShiftListSkeleton } from '../ui/Skeletons';
 import { ShiftRow } from './ShiftRow';
@@ -30,15 +30,11 @@ export const ShiftList: React.FC<ShiftListProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEventId, setSelectedEventId] = useState<string>('all');
-  const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentStatus>('all');
 
   const filteredShifts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return cycleShifts.filter((s) => {
       if (selectedEventId !== 'all' && s.eventId !== selectedEventId) {
-        return false;
-      }
-      if (paymentFilter !== 'all' && s.paymentStatus !== paymentFilter) {
         return false;
       }
       if (q) {
@@ -48,7 +44,7 @@ export const ShiftList: React.FC<ShiftListProps> = ({
       }
       return true;
     });
-  }, [cycleShifts, searchQuery, selectedEventId, paymentFilter]);
+  }, [cycleShifts, searchQuery, selectedEventId]);
 
   const groupedByDate = useMemo(() => {
     const map = new Map<
@@ -81,7 +77,7 @@ export const ShiftList: React.FC<ShiftListProps> = ({
 
   return (
     <section aria-label="Listado de turnos del ciclo" className="space-y-3">
-      {/* Buscador por nota y filtros por categoría y estado de cobro (AC15) */}
+      {/* Buscador por nota y filtro por categoría */}
       <div className="rounded-lg border border-border bg-surface p-3.5">
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <div className="relative">
@@ -113,30 +109,6 @@ export const ShiftList: React.FC<ShiftListProps> = ({
             ))}
           </select>
         </div>
-
-        {/* Filtro segmentado de estado de cobro */}
-        <div className="mt-2.5 grid grid-cols-3 gap-1 rounded-md bg-surface-muted p-1">
-          {(
-            [
-              { id: 'all', label: 'Todos' },
-              { id: 'pending', label: 'Pendientes' },
-              { id: 'paid', label: 'Cobrados' },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setPaymentFilter(tab.id)}
-              className={`min-h-[44px] rounded-sm text-xs font-medium transition-transform duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
-                paymentFilter === tab.id
-                  ? 'bg-selected text-text font-semibold'
-                  : 'text-text-secondary hover:text-text'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Lista de turnos agrupados por fecha */}
@@ -153,7 +125,7 @@ export const ShiftList: React.FC<ShiftListProps> = ({
           description={
             cycleShifts.length === 0
               ? 'Registra tu primera jornada con el botón superior o toca una plantilla rápida.'
-              : 'Prueba a limpiar el texto de búsqueda o cambiar el estado de cobro.'
+              : 'Prueba a limpiar el texto de búsqueda o seleccionar otra categoría.'
           }
           actionLabel={cycleShifts.length === 0 ? 'Registrar primer turno' : undefined}
           onAction={cycleShifts.length === 0 ? onOpenNewShift : undefined}

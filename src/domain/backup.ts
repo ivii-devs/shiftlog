@@ -3,7 +3,7 @@ import { clampCycleStartDay } from './cycles';
 import type {
   AppSettings,
   CategoryColor,
-  PaymentStatus,
+  MonthlyGoalConfig,
   RoundingMode,
   ShiftLogDatabase,
   ShiftRateType,
@@ -29,8 +29,8 @@ const VALID_RATE_TYPES: Set<ShiftRateType> = new Set([
   'night',
   'overtime',
 ]);
-const VALID_PAYMENT_STATUS: Set<PaymentStatus> = new Set(['pending', 'paid']);
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const YEAR_MONTH_KEY_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 function isValidCalendarDate(dateStr: string): boolean {
   if (!ISO_DATE_REGEX.test(dateStr)) return false;
@@ -49,6 +49,11 @@ function isRecord(val: unknown): val is Record<string, unknown> {
 
 function isFiniteNumber(val: unknown): val is number {
   return typeof val === 'number' && Number.isFinite(val);
+}
+
+export function sanitizeShiftRecord(raw: ShiftRecord & { paymentStatus?: unknown }): ShiftRecord {
+  const { paymentStatus: _legacyPaymentStatus, ...clean } = raw;
+  return clean;
 }
 
 function validateQuickTemplate(raw: unknown, eventName: string, idx: number): string | null {
@@ -172,9 +177,6 @@ function validateShift(raw: unknown, index: number): string | null {
   if (typeof raw.note !== 'string') {
     return `El turno "${raw.id}" tiene un campo de nota inválido.`;
   }
-  if (!VALID_PAYMENT_STATUS.has(raw.paymentStatus as PaymentStatus)) {
-    return `El turno "${raw.id}" tiene un estado de cobro inválido.`;
-  }
   if (!isRecord(raw.snapshot)) {
     return `El turno "${raw.id}" carece de instantánea histórica (snapshot).`;
   }
@@ -208,6 +210,58 @@ function validateShift(raw: unknown, index: number): string | null {
     return `Los totales calculados del turno "${raw.id}" son inválidos.`;
   }
   return null;
+}
+
+function validateMonthlyGoalOverrides(
+  raw: unknown
+):
+  | { ok: true; value: Record<string, MonthlyGoalConfig> }
+  | { ok: false; error: string } {
+  if (raw === undefined) {
+    return { ok: true, value: {} };
+  }
+  if (!isRecord(raw)) {
+    return {
+      ok: false,
+      error: 'El bloque "monthlyGoalOverrides" de configuración no es un objeto válido.',
+    };
+  }
+
+  const sanitized: Record<string, MonthlyGoalConfig> = {};
+  for (const [key, entry] of Object.entries(raw)) {
+    if (!YEAR_MONTH_KEY_REGEX.test(key)) {
+      return {
+        ok: false,
+        error: `La clave de meta mensual "${key}" no tiene formato YYYY-MM válido.`,
+      };
+    }
+    if (!isRecord(entry)) {
+      return {
+        ok: false,
+        error: `La meta personalizada de "${key}" no es un objeto válido.`,
+      };
+    }
+    const rawNet = entry.netEuros;
+    const rawHours = entry.hours;
+    if (rawNet !== null && (!isFiniteNumber(rawNet) || rawNet <= 0)) {
+      return {
+        ok: false,
+        error: `La meta neta en euros de "${key}" debe ser un número positivo o null.`,
+      };
+    }
+    if (rawHours !== null && (!isFiniteNumber(rawHours) || rawHours <= 0)) {
+      return {
+        ok: false,
+        error: `La meta de horas de "${key}" debe ser un número positivo o null.`,
+      };
+    }
+    sanitized[key] = {
+      netEuros: rawNet,
+      hours: rawHours,
+    };
+  }
+
+  return { ok: true, value: sanitized };
 }
 
 export type BackupValidationResult =
@@ -269,6 +323,11 @@ export function validateBackupJson(rawText: string): BackupValidationResult {
     };
   }
 
+  const overridesResult = validateMonthlyGoalOverrides(rawSettings.monthlyGoalOverrides);
+  if (!overridesResult.ok) {
+    return overridesResult;
+  }
+
   for (let i = 0; i < parsed.events.length; i++) {
     const err = validateEvent(parsed.events[i], i);
     if (err) {
@@ -276,11 +335,15 @@ export function validateBackupJson(rawText: string): BackupValidationResult {
     }
   }
 
+  const sanitizedShifts: ShiftRecord[] = [];
   for (let i = 0; i < parsed.shifts.length; i++) {
     const err = validateShift(parsed.shifts[i], i);
     if (err) {
       return { ok: false, error: err };
     }
+    sanitizedShifts.push(
+      sanitizeShiftRecord(parsed.shifts[i] as ShiftRecord & { paymentStatus?: unknown })
+    );
   }
 
   const sanitizedSettings: AppSettings = {
@@ -294,6 +357,7 @@ export function validateBackupJson(rawText: string): BackupValidationResult {
       isFiniteNumber(rawSettings.monthlyGoalHours) && rawSettings.monthlyGoalHours > 0
         ? rawSettings.monthlyGoalHours
         : null,
+    monthlyGoalOverrides: overridesResult.value,
   };
 
   return {
@@ -305,7 +369,7 @@ export function validateBackupJson(rawText: string): BackupValidationResult {
           ? parsed.exportedAt
           : new Date().toISOString(),
       events: parsed.events as WorkEvent[],
-      shifts: parsed.shifts as ShiftRecord[],
+      shifts: sanitizedShifts,
       settings: sanitizedSettings,
     },
   };
@@ -325,11 +389,16 @@ export function mergeDatabases(
 
   const shiftsMap = new Map<string, ShiftRecord>();
   for (const sh of current.shifts) {
-    shiftsMap.set(sh.id, sh);
+    shiftsMap.set(sh.id, sanitizeShiftRecord(sh));
   }
   for (const sh of incoming.shifts) {
-    shiftsMap.set(sh.id, sh);
+    shiftsMap.set(sh.id, sanitizeShiftRecord(sh));
   }
+
+  const mergedOverrides: Record<string, MonthlyGoalConfig> = {
+    ...(incoming.settings.monthlyGoalOverrides ?? {}),
+    ...(current.settings.monthlyGoalOverrides ?? {}),
+  };
 
   return {
     events: Array.from(eventsMap.values()),
@@ -343,6 +412,7 @@ export function mergeDatabases(
         current.settings.monthlyGoalNetEuros ?? incoming.settings.monthlyGoalNetEuros,
       monthlyGoalHours:
         current.settings.monthlyGoalHours ?? incoming.settings.monthlyGoalHours,
+      monthlyGoalOverrides: mergedOverrides,
     },
   };
 }
@@ -356,7 +426,10 @@ export function buildBackupDatabase(state: {
     version: 1,
     exportedAt: new Date().toISOString(),
     events: state.events,
-    shifts: state.shifts,
-    settings: state.settings,
+    shifts: state.shifts.map((s) => sanitizeShiftRecord(s)),
+    settings: {
+      ...state.settings,
+      monthlyGoalOverrides: state.settings.monthlyGoalOverrides ?? {},
+    },
   };
 }

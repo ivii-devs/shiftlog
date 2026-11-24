@@ -4,7 +4,95 @@ import {
   parseIsoDateLocal,
   toIsoDateLocal,
 } from './formatters';
-import type { CycleWindow, ShiftRecord } from './types';
+import type { AppSettings, CycleWindow, ShiftRecord } from './types';
+
+export interface ResolvedCycleGoals {
+  key: string;
+  netEuros: number | null;
+  hours: number | null;
+  isCustomOverride: boolean;
+}
+
+const YEAR_MONTH_KEY_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function sanitizePositiveGoal(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+export function formatYearMonthKey(year: number, monthIndexZeroBased: number): string {
+  const normalized = new Date(year, monthIndexZeroBased, 1, 12, 0, 0, 0);
+  const y = normalized.getFullYear();
+  const m = normalized.getMonth() + 1;
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+
+export function parseYearMonthKey(key: string): { year: number; month: number } | null {
+  if (!YEAR_MONTH_KEY_REGEX.test(key)) return null;
+  const [yStr, mStr] = key.split('-');
+  const year = Number(yStr);
+  const month = Number(mStr) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+  return { year, month };
+}
+
+export function getCycleGoalKey(
+  cycle: Pick<CycleWindow, 'anchorYear' | 'anchorMonth'>
+): string {
+  return formatYearMonthKey(cycle.anchorYear, cycle.anchorMonth);
+}
+
+export function resolveCycleGoals(
+  settings: AppSettings,
+  cycle: Pick<CycleWindow, 'anchorYear' | 'anchorMonth'>
+): ResolvedCycleGoals {
+  const key = getCycleGoalKey(cycle);
+  const overrides = settings.monthlyGoalOverrides;
+
+  if (overrides && Object.prototype.hasOwnProperty.call(overrides, key)) {
+    const custom = overrides[key];
+    return {
+      key,
+      netEuros: sanitizePositiveGoal(custom?.netEuros),
+      hours: sanitizePositiveGoal(custom?.hours),
+      isCustomOverride: true,
+    };
+  }
+
+  return {
+    key,
+    netEuros: sanitizePositiveGoal(settings.monthlyGoalNetEuros),
+    hours: sanitizePositiveGoal(settings.monthlyGoalHours),
+    isCustomOverride: false,
+  };
+}
+
+export function diffCalendarDays(startIso: string, endIso: string): number {
+  const [sy, sm, sd] = startIso.split('-').map(Number);
+  const [ey, em, ed] = endIso.split('-').map(Number);
+  const startUtc = Date.UTC(sy, (sm || 1) - 1, sd || 1);
+  const endUtc = Date.UTC(ey, (em || 1) - 1, ed || 1);
+  return Math.round((endUtc - startUtc) / 86_400_000);
+}
+
+export function enumerateCycleDates(
+  cycle: Pick<CycleWindow, 'startDate' | 'endDate'>
+): string[] {
+  const totalDays = diffCalendarDays(cycle.startDate, cycle.endDate) + 1;
+  if (totalDays <= 0) return [];
+  const start = parseIsoDateLocal(cycle.startDate);
+  const startYear = start.getFullYear();
+  const startMonth = start.getMonth();
+  const startDay = start.getDate();
+
+  const dates: string[] = [];
+  for (let i = 0; i < totalDays; i++) {
+    dates.push(toIsoDateLocal(new Date(startYear, startMonth, startDay + i, 12, 0, 0, 0)));
+  }
+  return dates;
+}
 
 const SHORT_MONTHS = [
   'Ene',

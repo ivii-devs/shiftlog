@@ -2,6 +2,7 @@ import React from 'react';
 import type { CycleAnalytics } from '../../domain/analytics';
 import {
   formatCurrency,
+  formatHourlyRate,
   formatMinutes,
   formatNumericDateEs,
   formatPercentage,
@@ -56,10 +57,9 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
           </div>
         </div>
         <div>
-          <div className="text-xs font-medium">Cobrado / pendiente</div>
-          <div className="font-mono tabular-nums text-sm font-semibold">
-            {formatCurrency(analytics.paidNetAmount)} /{' '}
-            {formatCurrency(analytics.pendingNetAmount)}
+          <div className="text-xs font-medium">Tarifa media neta</div>
+          <div className="font-mono tabular-nums text-lg font-bold">
+            {formatHourlyRate(analytics.actualHourlyNetRate)}
           </div>
         </div>
       </div>
@@ -106,7 +106,6 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
               <th className="py-1.5">Tipo</th>
               <th className="py-1.5">Neto</th>
               <th className="py-1.5">Bruto</th>
-              <th className="py-1.5">Estado</th>
               <th className="py-1.5">Nota</th>
             </tr>
           </thead>
@@ -122,9 +121,6 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                 <td className="py-1.5 font-sans">{SHIFT_RATE_LABELS[s.rateType]}</td>
                 <td className="py-1.5">{formatCurrency(s.computed.totalNetAmount)}</td>
                 <td className="py-1.5">{formatCurrency(s.computed.totalGrossAmount)}</td>
-                <td className="py-1.5 font-sans">
-                  {s.paymentStatus === 'paid' ? 'Cobrado' : 'Pendiente'}
-                </td>
                 <td className="py-1.5 font-sans">{s.note}</td>
               </tr>
             ))}

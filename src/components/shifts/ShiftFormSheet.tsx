@@ -14,7 +14,6 @@ import {
 import {
   ROUNDING_MODE_LABELS,
   SHIFT_RATE_LABELS,
-  type PaymentStatus,
   type ShiftRateType,
   type ShiftRecord,
 } from '../../domain/types';
@@ -54,7 +53,6 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
   const [rateType, setRateType] = useState<ShiftRateType>('normal');
   const [fixedBonus, setFixedBonus] = useState('0');
   const [expenseAdjustment, setExpenseAdjustment] = useState('0');
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
   const [note, setNote] = useState('');
   const [refreshRatesFromEvent, setRefreshRatesFromEvent] = useState(false);
 
@@ -71,7 +69,6 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
       setRateType(editingShift.rateType);
       setFixedBonus(String(editingShift.fixedBonus));
       setExpenseAdjustment(String(editingShift.expenseAdjustment));
-      setPaymentStatus(editingShift.paymentStatus);
       setNote(editingShift.note);
     } else {
       const firstActive = selectableEvents[0];
@@ -87,7 +84,6 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
       setRateType('normal');
       setFixedBonus('0');
       setExpenseAdjustment('0');
-      setPaymentStatus('pending');
       setNote('');
     }
   }, [open, editingShift, initialDate, selectableEvents]);
@@ -98,7 +94,6 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
     setEventId(nextEventId);
     const nextEv = events.find((e) => e.id === nextEventId);
     if (nextEv) {
-      // AC4: Automatically preload defaultBreakMinutes when event has unpaid break enabled
       setBreakMinutes(
         nextEv.hasUnpaidBreak ? String(nextEv.defaultBreakMinutes) : '0'
       );
@@ -180,7 +175,6 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
         fixedBonus: parsedBonus,
         expenseAdjustment: parsedExpense,
         note,
-        paymentStatus,
         refreshRatesFromEvent,
       });
       showToast('Turno actualizado');
@@ -195,7 +189,6 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
         fixedBonus: parsedBonus,
         expenseAdjustment: parsedExpense,
         note,
-        paymentStatus,
       });
       setCycleForDate(date);
       showToast('Turno registrado');
@@ -211,7 +204,7 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
       description="Introduce el horario y verifica el cálculo neto instantáneo antes de guardar."
       footer={
         <div className="space-y-3">
-          {/* Previsualización instantánea en vivo (AC3, AC8) */}
+          {/* Previsualización instantánea en vivo */}
           <div className="flex items-center justify-between rounded-md border border-border bg-surface-muted px-3.5 py-2.5">
             <div>
               <div className="text-xs text-text-secondary">
@@ -368,7 +361,7 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
               id="shift-break"
               type="number"
               min="0"
-              step="5"
+              step="1"
               value={breakMinutes}
               onChange={(e) => setBreakMinutes(e.target.value)}
               className="font-mono tabular-nums mt-1.5 min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
@@ -412,7 +405,7 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
             <input
               id="shift-bonus"
               type="number"
-              step="0.50"
+              step="0.01"
               value={fixedBonus}
               onChange={(e) => setFixedBonus(e.target.value)}
               className="font-mono tabular-nums mt-1.5 min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
@@ -429,7 +422,7 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
             <input
               id="shift-expense"
               type="number"
-              step="0.50"
+              step="0.01"
               placeholder="Ej. -3.50 o 10"
               value={expenseAdjustment}
               onChange={(e) => setExpenseAdjustment(e.target.value)}
@@ -438,45 +431,25 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
           </div>
         </div>
 
-        {/* Estado de cobro y Nota */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="shift-payment"
-              className="block text-sm font-medium text-text-secondary"
-            >
-              Estado de cobro
-            </label>
-            <select
-              id="shift-payment"
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
-              className="mt-1.5 min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-            >
-              <option value="pending">Pendiente de cobro</option>
-              <option value="paid">Cobrado</option>
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="shift-note"
-              className="block text-sm font-medium text-text-secondary"
-            >
-              Nota de la sesión (opcional)
-            </label>
-            <input
-              id="shift-note"
-              type="text"
-              placeholder="Ej. Sala principal, refuerzo..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="mt-1.5 min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text placeholder:text-text-muted focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-            />
-          </div>
+        {/* Nota */}
+        <div>
+          <label
+            htmlFor="shift-note"
+            className="block text-sm font-medium text-text-secondary"
+          >
+            Nota de la sesión (opcional)
+          </label>
+          <input
+            id="shift-note"
+            type="text"
+            placeholder="Ej. Sala principal, refuerzo..."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="mt-1.5 min-h-[44px] w-full rounded-md border border-border bg-surface-muted px-3 text-base text-text placeholder:text-text-muted focus:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          />
         </div>
 
-        {/* Aviso de inmutabilidad de tarifa histórica (AC9) */}
+        {/* Aviso de inmutabilidad de tarifa histórica */}
         {hasHistoricalRateDifference && editingShift && selectedEvent && (
           <div className="rounded-md border border-border bg-surface-muted p-3 text-xs text-text-secondary">
             <div>

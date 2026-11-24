@@ -6,6 +6,7 @@ import {
   formatMonthYearEs,
   getTodayIsoLocal,
   parseIsoDateLocal,
+  round2,
   toIsoDateLocal,
 } from '../../domain/formatters';
 import {
@@ -14,7 +15,7 @@ import {
   type ShiftRecord,
 } from '../../domain/types';
 import { useShiftStore } from '../../store/useShiftStore';
-import { DayShiftsPanel } from './DayShiftsPanel';
+import { DayShiftsPanel, type CalendarWorkedDayGroup } from './DayShiftsPanel';
 
 interface CalendarViewProps {
   onAddShiftOnDate: (dateStr: string) => void;
@@ -69,6 +70,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       {
         shifts: ShiftRecord[];
         totalMinutes: number;
+        totalNet: number;
         colors: CategoryColor[];
       }
     >();
@@ -78,6 +80,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       if (existing) {
         existing.shifts.push(s);
         existing.totalMinutes += s.computed.billableMinutes;
+        existing.totalNet = round2(existing.totalNet + s.computed.totalNetAmount);
         if (!existing.colors.includes(s.snapshot.eventColorSnap)) {
           existing.colors.push(s.snapshot.eventColorSnap);
         }
@@ -85,10 +88,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         map.set(s.date, {
           shifts: [s],
           totalMinutes: s.computed.billableMinutes,
+          totalNet: s.computed.totalNetAmount,
           colors: [s.snapshot.eventColorSnap],
         });
       }
     }
+
+    for (const entry of map.values()) {
+      entry.shifts.sort((a, b) => b.startTime.localeCompare(a.startTime));
+    }
+
     return map;
   }, [shifts]);
 
@@ -112,10 +121,48 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return cells;
   }, [calYear, calMonth]);
 
+  const visibleMonthPrefix = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-`;
+  const monthLabel = formatMonthYearEs(calYear, calMonth);
+
+  const { workedDays, monthTotalMinutes, monthTotalNet } = useMemo(() => {
+    const days: CalendarWorkedDayGroup[] = [];
+    let totalMins = 0;
+    let totalNet = 0;
+
+    for (const [date, info] of shiftsByDate.entries()) {
+      if (date.startsWith(visibleMonthPrefix)) {
+        days.push({
+          date,
+          shifts: info.shifts,
+          totalMinutes: info.totalMinutes,
+          totalNet: info.totalNet,
+        });
+        totalMins += info.totalMinutes;
+        totalNet += info.totalNet;
+      }
+    }
+
+    // Orden cronológico descendente (más recientes primero)
+    days.sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      workedDays: days,
+      monthTotalMinutes: totalMins,
+      monthTotalNet: round2(totalNet),
+    };
+  }, [shiftsByDate, visibleMonthPrefix]);
+
   const handleNavigateMonth = (offset: number) => {
     const next = new Date(calYear, calMonth + offset, 1, 12, 0, 0, 0);
-    setCalYear(next.getFullYear());
-    setCalMonth(next.getMonth());
+    const nextYear = next.getFullYear();
+    const nextMonth = next.getMonth();
+    const nextPrefix = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-`;
+
+    setCalYear(nextYear);
+    setCalMonth(nextMonth);
+    setSelectedDate(
+      todayIso.startsWith(nextPrefix) ? todayIso : toIsoDateLocal(next)
+    );
   };
 
   const getIntensityClass = (totalMinutes: number, isSelected: boolean): string => {
@@ -142,10 +189,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 pb-10">
         <section
           aria-label="Calendario mensual de turnos"
-          className="rounded-lg border border-border bg-surface p-4"
+          className="rounded-lg border border-border bg-surface px-1.5 py-4 sm:p-4"
         >
           {/* Cabecera del mes */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between px-2 sm:px-0">
             <button
               type="button"
               onClick={() => handleNavigateMonth(-1)}
@@ -156,7 +203,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
 
             <h1 className="text-base font-semibold tracking-tight text-text">
-              {formatMonthYearEs(calYear, calMonth)}
+              {monthLabel}
             </h1>
 
             <button
@@ -170,7 +217,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {/* Cabecera Lunes a Domingo */}
-          <div className="mt-3 grid grid-cols-7 gap-1.5 text-center text-xs font-medium text-text-secondary">
+          <div className="mt-3 grid grid-cols-7 gap-0.5 text-center text-xs font-medium text-text-secondary sm:gap-1.5">
             {WEEKDAYS_HEADER.map((w) => (
               <div key={w} className="py-1">
                 {w}
@@ -179,7 +226,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {/* Cuadrícula de días */}
-          <div className="mt-1 grid grid-cols-7 gap-1.5">
+          <div className="mt-1 grid grid-cols-7 gap-0.5 sm:gap-1.5">
             {calendarCells.map((cell, idx) => {
               if (!cell) {
                 return <div key={`blank-${idx}`} className="min-h-[52px]" />;
@@ -253,10 +300,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
         </section>
 
-        {/* Detalle del día seleccionado */}
+        {/* Barra rápida del día seleccionado y agenda completa del mes visible */}
         <DayShiftsPanel
+          monthLabel={monthLabel}
           selectedDate={selectedDate}
-          dayShifts={selectedDayShifts}
+          selectedDayShifts={selectedDayShifts}
+          workedDays={workedDays}
+          monthTotalMinutes={monthTotalMinutes}
+          monthTotalNet={monthTotalNet}
           onAddShiftOnDate={onAddShiftOnDate}
           onEditShift={onEditShift}
           onRepeatShift={onRepeatShift}

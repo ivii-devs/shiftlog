@@ -1,7 +1,5 @@
 import React from 'react';
 import {
-  CheckCircle2,
-  Clock,
   Copy,
   Files,
   CalendarPlus,
@@ -29,14 +27,11 @@ interface ShiftRowProps {
 }
 
 export const ShiftRow: React.FC<ShiftRowProps> = ({ shift, onEdit, onRepeat }) => {
-  const toggleShiftPaymentStatus = useShiftStore((s) => s.toggleShiftPaymentStatus);
   const cloneShiftToToday = useShiftStore((s) => s.cloneShiftToToday);
   const duplicateShiftToDate = useShiftStore((s) => s.duplicateShiftToDate);
   const deleteShift = useShiftStore((s) => s.deleteShift);
   const goToCurrentCycle = useShiftStore((s) => s.goToCurrentCycle);
   const showToast = useShiftStore((s) => s.showToast);
-
-  const isPaid = shift.paymentStatus === 'paid';
 
   const handleCloneToday = () => {
     const cloned = cloneShiftToToday(shift.id);
@@ -135,78 +130,54 @@ export const ShiftRow: React.FC<ShiftRowProps> = ({ shift, onEdit, onRepeat }) =
       </div>
 
       {/* Barra de acciones táctiles de fila (>= 44x44px) */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2.5">
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5 border-t border-border pt-2.5">
         <button
           type="button"
-          onClick={() => toggleShiftPaymentStatus(shift.id)}
-          className={`inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-sm border px-3 text-xs font-semibold transition-transform duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
-            isPaid
-              ? 'border-success-line bg-success-quiet text-emerald-500'
-              : 'border-warning-line bg-warning-quiet text-amber-500'
-          }`}
+          onClick={handleCloneToday}
+          aria-label="Clonar turno en hoy"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-md border border-border bg-surface-muted px-2.5 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
-          {isPaid ? (
-            <>
-              <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
-              <span>Cobrado</span>
-            </>
-          ) : (
-            <>
-              <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-              <span>Pendiente</span>
-            </>
-          )}
+          <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <span>Clonar hoy</span>
         </button>
 
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            onClick={handleCloneToday}
-            aria-label="Clonar turno en hoy"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-md border border-border bg-surface-muted px-2.5 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>Clonar hoy</span>
-          </button>
+        <button
+          type="button"
+          onClick={handleDuplicate}
+          aria-label="Duplicar turno"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-md border border-border bg-surface-muted px-2.5 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Files className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <span>Duplicar</span>
+        </button>
 
-          <button
-            type="button"
-            onClick={handleDuplicate}
-            aria-label="Duplicar turno"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-md border border-border bg-surface-muted px-2.5 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <Files className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>Duplicar</span>
-          </button>
+        <button
+          type="button"
+          onClick={() => onRepeat(shift)}
+          aria-label="Repetir o duplicar en varios días"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-md border border-border bg-surface-muted px-2.5 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <CalendarPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <span>Repetir</span>
+        </button>
 
-          <button
-            type="button"
-            onClick={() => onRepeat(shift)}
-            aria-label="Repetir o duplicar en varios días"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-md border border-border bg-surface-muted px-2.5 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <CalendarPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>Repetir</span>
-          </button>
+        <button
+          type="button"
+          onClick={() => onEdit(shift)}
+          aria-label="Editar turno"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-border bg-surface-muted text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Pencil className="h-4 w-4" strokeWidth={1.75} />
+        </button>
 
-          <button
-            type="button"
-            onClick={() => onEdit(shift)}
-            aria-label="Editar turno"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-border bg-surface-muted text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <Pencil className="h-4 w-4" strokeWidth={1.75} />
-          </button>
-
-          <button
-            type="button"
-            onClick={handleDelete}
-            aria-label="Eliminar turno"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-border bg-surface-muted text-text-secondary transition-transform duration-150 hover:text-red-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleDelete}
+          aria-label="Eliminar turno"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-border bg-surface-muted text-text-secondary transition-transform duration-150 hover:text-red-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+        </button>
       </div>
     </div>
   );

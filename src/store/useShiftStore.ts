@@ -1,5 +1,24 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { mergeDatabases, sanitizeShiftRecord } from '../domain/backup';
+import { calculateShiftTotals, createHistoricalSnapshot } from '../domain/calculations';
+import {
+  clampCycleStartDay,
+  getAdjacentCycle,
+  getCycleByAnchor,
+  getCycleForDate,
+  parseYearMonthKey,
+} from '../domain/cycles';
+import { getTodayIsoLocal } from '../domain/formatters';
+import type {
+  AppSettings,
+  CycleWindow,
+  MonthlyGoalConfig,
+  ShiftLogDatabase,
+  ShiftRateType,
+  ShiftRecord,
+  WorkEvent,
+} from '../domain/types';
 
 const memoryStorageMap = new Map<string, string>();
 const fallbackMemoryStorage: StateStorage = {
@@ -27,25 +46,6 @@ function getSafeLocalStorage(): StateStorage {
   }
   return fallbackMemoryStorage;
 }
-import { mergeDatabases } from '../domain/backup';
-import { calculateShiftTotals, createHistoricalSnapshot } from '../domain/calculations';
-import {
-  clampCycleStartDay,
-  getAdjacentCycle,
-  getCycleByAnchor,
-  getCycleForDate,
-  isDateInCycle,
-} from '../domain/cycles';
-import { getTodayIsoLocal } from '../domain/formatters';
-import type {
-  AppSettings,
-  CycleWindow,
-  PaymentStatus,
-  ShiftLogDatabase,
-  ShiftRateType,
-  ShiftRecord,
-  WorkEvent,
-} from '../domain/types';
 
 export interface ToastNotice {
   id: string;
@@ -63,7 +63,6 @@ export interface CreateShiftPayload {
   fixedBonus?: number;
   expenseAdjustment?: number;
   note?: string;
-  paymentStatus?: PaymentStatus;
 }
 
 export interface UpdateShiftPayload {
@@ -76,7 +75,6 @@ export interface UpdateShiftPayload {
   fixedBonus: number;
   expenseAdjustment: number;
   note: string;
-  paymentStatus: PaymentStatus;
   refreshRatesFromEvent?: boolean;
 }
 
@@ -150,10 +148,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cycleStartDay: 1,
   monthlyGoalNetEuros: 600,
   monthlyGoalHours: 45,
+  monthlyGoalOverrides: {},
 };
 
 function generateId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function sanitizeGoalValue(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
 }
 
 interface ShiftStoreState {
@@ -188,12 +194,10 @@ interface ShiftStoreState {
   duplicateShiftToDate: (shiftId: string, targetDate: string) => ShiftRecord | null;
   repeatShiftOnDates: (shiftId: string, targetDates: string[]) => ShiftRecord[];
 
-  // Payment actions
-  toggleShiftPaymentStatus: (shiftId: string) => void;
-  setCyclePaymentStatus: (cycle: CycleWindow, status: PaymentStatus) => number;
-
   // Cycle & Settings actions
   updateSettings: (partial: Partial<AppSettings>) => void;
+  setCycleGoalOverride: (cycleKey: string, goal: MonthlyGoalConfig) => void;
+  clearCycleGoalOverride: (cycleKey: string) => void;
   navigateCycle: (offsetMonths: number) => void;
   goToCurrentCycle: () => void;
   setCycleForDate: (dateStr: string) => void;
@@ -216,12 +220,70 @@ function getInitialCycleAnchor(cycleStartDay: number): { year: number; month: nu
   return { year: c.anchorYear, month: c.anchorMonth };
 }
 
+export function hydratePersistedShiftState(
+  persistedState: unknown,
+  currentState: ShiftStoreState
+): ShiftStoreState {
+  if (!persistedState || typeof persistedState !== 'object') {
+    return currentState;
+  }
+
+  const persisted = persistedState as Partial<ShiftStoreState>;
+
+  const sanitizedShifts: ShiftRecord[] = Array.isArray(persisted.shifts)
+    ? persisted.shifts
+        .filter((raw): raw is ShiftRecord => Boolean(raw && typeof raw === 'object'))
+        .map((raw) =>
+          sanitizeShiftRecord(raw as ShiftRecord & { paymentStatus?: unknown })
+        )
+    : currentState.shifts;
+
+  const persistedSettings = persisted.settings;
+  const sanitizedOverrides: Record<string, MonthlyGoalConfig> = {};
+  if (
+    persistedSettings?.monthlyGoalOverrides &&
+    typeof persistedSettings.monthlyGoalOverrides === 'object' &&
+    !Array.isArray(persistedSettings.monthlyGoalOverrides)
+  ) {
+    for (const [key, entry] of Object.entries(persistedSettings.monthlyGoalOverrides)) {
+      if (!parseYearMonthKey(key) || !entry || typeof entry !== 'object') continue;
+      sanitizedOverrides[key] = {
+        netEuros: sanitizeGoalValue(entry.netEuros),
+        hours: sanitizeGoalValue(entry.hours),
+      };
+    }
+  }
+
+  const mergedSettings: AppSettings = {
+    cycleStartDay: clampCycleStartDay(
+      persistedSettings?.cycleStartDay ?? currentState.settings.cycleStartDay
+    ),
+    monthlyGoalNetEuros:
+      persistedSettings?.monthlyGoalNetEuros !== undefined
+        ? sanitizeGoalValue(persistedSettings.monthlyGoalNetEuros)
+        : currentState.settings.monthlyGoalNetEuros,
+    monthlyGoalHours:
+      persistedSettings?.monthlyGoalHours !== undefined
+        ? sanitizeGoalValue(persistedSettings.monthlyGoalHours)
+        : currentState.settings.monthlyGoalHours,
+    monthlyGoalOverrides: sanitizedOverrides,
+  };
+
+  return {
+    ...currentState,
+    events: Array.isArray(persisted.events) ? persisted.events : currentState.events,
+    shifts: sanitizedShifts,
+    settings: mergedSettings,
+    activeCycleAnchor: getInitialCycleAnchor(mergedSettings.cycleStartDay),
+  };
+}
+
 export const useShiftStore = create<ShiftStoreState>()(
   persist(
     (set, get) => ({
       events: DEFAULT_EVENTS,
       shifts: [],
-      settings: DEFAULT_SETTINGS,
+      settings: { ...DEFAULT_SETTINGS, monthlyGoalOverrides: {} },
       activeCycleAnchor: getInitialCycleAnchor(DEFAULT_SETTINGS.cycleStartDay),
       toast: null,
 
@@ -248,7 +310,7 @@ export const useShiftStore = create<ShiftStoreState>()(
       },
 
       updateEvent: (id, updates) => {
-        // AC9: Never modifies existing shifts or their historical snapshots
+        // Never modifies existing shifts or their historical snapshots
         set((state) => ({
           events: state.events.map((ev) => (ev.id === id ? { ...ev, ...updates } : ev)),
         }));
@@ -303,7 +365,6 @@ export const useShiftStore = create<ShiftStoreState>()(
           fixedBonus,
           expenseAdjustment,
           note: (payload.note ?? '').trim(),
-          paymentStatus: payload.paymentStatus ?? 'pending',
           snapshot,
           computed,
           createdAt: new Date().toISOString(),
@@ -339,7 +400,6 @@ export const useShiftStore = create<ShiftStoreState>()(
           fixedBonus: 0,
           expenseAdjustment: 0,
           note: tpl.label,
-          paymentStatus: 'pending',
         });
       },
 
@@ -390,7 +450,6 @@ export const useShiftStore = create<ShiftStoreState>()(
           fixedBonus: payload.fixedBonus,
           expenseAdjustment: payload.expenseAdjustment,
           note: payload.note.trim(),
-          paymentStatus: payload.paymentStatus,
           snapshot,
           computed,
         };
@@ -420,7 +479,6 @@ export const useShiftStore = create<ShiftStoreState>()(
           ...source,
           id: generateId('sh'),
           date: targetDate,
-          paymentStatus: 'pending',
           snapshot: { ...source.snapshot },
           computed: { ...source.computed },
           createdAt: new Date().toISOString(),
@@ -442,7 +500,6 @@ export const useShiftStore = create<ShiftStoreState>()(
           ...source,
           id: generateId('sh'),
           date: dateStr,
-          paymentStatus: 'pending',
           snapshot: { ...source.snapshot },
           computed: { ...source.computed },
           createdAt: new Date().toISOString(),
@@ -455,33 +512,6 @@ export const useShiftStore = create<ShiftStoreState>()(
         return created;
       },
 
-      toggleShiftPaymentStatus: (shiftId) => {
-        set((state) => ({
-          shifts: state.shifts.map((s) =>
-            s.id === shiftId
-              ? {
-                  ...s,
-                  paymentStatus: s.paymentStatus === 'paid' ? 'pending' : 'paid',
-                }
-              : s
-          ),
-        }));
-      },
-
-      setCyclePaymentStatus: (cycle, status) => {
-        let updatedCount = 0;
-        set((state) => ({
-          shifts: state.shifts.map((s) => {
-            if (isDateInCycle(s.date, cycle) && s.paymentStatus !== status) {
-              updatedCount += 1;
-              return { ...s, paymentStatus: status };
-            }
-            return s;
-          }),
-        }));
-        return updatedCount;
-      },
-
       updateSettings: (partial) => {
         set((state) => {
           const nextCycleStartDay =
@@ -489,18 +519,61 @@ export const useShiftStore = create<ShiftStoreState>()(
               ? clampCycleStartDay(partial.cycleStartDay)
               : state.settings.cycleStartDay;
 
+          const cycleStartDayChanged =
+            partial.cycleStartDay !== undefined &&
+            nextCycleStartDay !== state.settings.cycleStartDay;
+
           const nextSettings: AppSettings = {
             ...state.settings,
             ...partial,
             cycleStartDay: nextCycleStartDay,
+            monthlyGoalOverrides:
+              partial.monthlyGoalOverrides !== undefined
+                ? { ...partial.monthlyGoalOverrides }
+                : state.settings.monthlyGoalOverrides ?? {},
           };
 
-          const currentCycle = getCycleForDate(getTodayIsoLocal(), nextCycleStartDay);
+          if (cycleStartDayChanged) {
+            const currentCycle = getCycleForDate(getTodayIsoLocal(), nextCycleStartDay);
+            return {
+              settings: nextSettings,
+              activeCycleAnchor: {
+                year: currentCycle.anchorYear,
+                month: currentCycle.anchorMonth,
+              },
+            };
+          }
+
           return {
             settings: nextSettings,
-            activeCycleAnchor: {
-              year: currentCycle.anchorYear,
-              month: currentCycle.anchorMonth,
+          };
+        });
+      },
+
+      setCycleGoalOverride: (cycleKey, goal) => {
+        if (!parseYearMonthKey(cycleKey)) return;
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            monthlyGoalOverrides: {
+              ...(state.settings.monthlyGoalOverrides ?? {}),
+              [cycleKey]: {
+                netEuros: sanitizeGoalValue(goal.netEuros),
+                hours: sanitizeGoalValue(goal.hours),
+              },
+            },
+          },
+        }));
+      },
+
+      clearCycleGoalOverride: (cycleKey) => {
+        set((state) => {
+          const nextOverrides = { ...(state.settings.monthlyGoalOverrides ?? {}) };
+          delete nextOverrides[cycleKey];
+          return {
+            settings: {
+              ...state.settings,
+              monthlyGoalOverrides: nextOverrides,
             },
           };
         });
@@ -550,8 +623,11 @@ export const useShiftStore = create<ShiftStoreState>()(
           if (mode === 'replace') {
             return {
               events: db.events,
-              shifts: db.shifts,
-              settings: db.settings,
+              shifts: db.shifts.map((s) => sanitizeShiftRecord(s)),
+              settings: {
+                ...db.settings,
+                monthlyGoalOverrides: { ...(db.settings.monthlyGoalOverrides ?? {}) },
+              },
               activeCycleAnchor: getInitialCycleAnchor(db.settings.cycleStartDay),
             };
           }
@@ -572,7 +648,14 @@ export const useShiftStore = create<ShiftStoreState>()(
       },
 
       resetStoreForTests: (customState) => {
-        const settings = customState?.settings ?? DEFAULT_SETTINGS;
+        const settings: AppSettings = customState?.settings
+          ? {
+              ...customState.settings,
+              monthlyGoalOverrides: {
+                ...(customState.settings.monthlyGoalOverrides ?? {}),
+              },
+            }
+          : { ...DEFAULT_SETTINGS, monthlyGoalOverrides: {} };
         set({
           events: customState?.events ?? DEFAULT_EVENTS,
           shifts: customState?.shifts ?? [],
@@ -604,6 +687,8 @@ export const useShiftStore = create<ShiftStoreState>()(
         shifts: state.shifts,
         settings: state.settings,
       }),
+      merge: (persistedState, currentState) =>
+        hydratePersistedShiftState(persistedState, currentState),
     }
   )
 );
