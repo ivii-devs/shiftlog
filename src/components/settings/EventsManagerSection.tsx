@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Archive, ArchiveRestore, Pencil, Briefcase } from 'lucide-react';
+import { Plus, Archive, ArchiveRestore, Pencil, Briefcase, Trash2 } from 'lucide-react';
 import { formatHourlyRate, formatMultiplier } from '../../domain/formatters';
 import {
   CATEGORY_COLOR_HEX,
@@ -13,11 +13,13 @@ import { EventFormSheet } from './EventFormSheet';
 export const EventsManagerSection: React.FC = () => {
   const events = useShiftStore((s) => s.events);
   const toggleArchiveEvent = useShiftStore((s) => s.toggleArchiveEvent);
+  const deleteEvent = useShiftStore((s) => s.deleteEvent);
   const showToast = useShiftStore((s) => s.showToast);
 
   const [eventFilter, setEventFilter] = useState<'active' | 'archived'>('active');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<WorkEvent | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const visibleEvents = events.filter((ev) =>
     eventFilter === 'active' ? !ev.archived : ev.archived
@@ -147,44 +149,83 @@ export const EventsManagerSection: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-center">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditEvent(ev)}
-                    aria-label={`Editar ${ev.name}`}
-                    className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-md border border-border bg-surface-muted px-3 text-xs font-medium text-text transition-transform duration-150 hover:bg-selected active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                  >
-                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    <span>Editar</span>
-                  </button>
+                <div className="flex flex-wrap items-center justify-end gap-2 self-end sm:self-center">
+                  {ev.archived && confirmDeleteId === ev.id ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-border bg-surface-muted px-3 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          deleteEvent(ev.id);
+                          setConfirmDeleteId(null);
+                          showToast(`Evento "${ev.name}" eliminado`, 'info');
+                        }}
+                        aria-label={`Confirmar borrado de ${ev.name}`}
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-md border border-danger-line bg-danger-quiet px-3 text-xs font-semibold text-red-500 transition-transform duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        <span>Confirmar</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditEvent(ev)}
+                        aria-label={`Editar ${ev.name}`}
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-md border border-border bg-surface-muted px-3 text-xs font-medium text-text transition-transform duration-150 hover:bg-selected active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        <span>Editar</span>
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      toggleArchiveEvent(ev.id);
-                      showToast(
-                        ev.archived
-                          ? `Evento "${ev.name}" restaurado`
-                          : `Evento "${ev.name}" archivado`
-                      );
-                    }}
-                    aria-label={
-                      ev.archived ? `Restaurar ${ev.name}` : `Archivar ${ev.name}`
-                    }
-                    className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-md border border-border bg-surface-muted px-3 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                  >
-                    {ev.archived ? (
-                      <>
-                        <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={1.75} />
-                        <span>Restaurar</span>
-                      </>
-                    ) : (
-                      <>
-                        <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
-                        <span>Archivar</span>
-                      </>
-                    )}
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmDeleteId(null);
+                          toggleArchiveEvent(ev.id);
+                          showToast(
+                            ev.archived
+                              ? `Evento "${ev.name}" restaurado`
+                              : `Evento "${ev.name}" archivado`
+                          );
+                        }}
+                        aria-label={
+                          ev.archived ? `Restaurar ${ev.name}` : `Archivar ${ev.name}`
+                        }
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-md border border-border bg-surface-muted px-3 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        {ev.archived ? (
+                          <>
+                            <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={1.75} />
+                            <span>Restaurar</span>
+                          </>
+                        ) : (
+                          <>
+                            <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
+                            <span>Archivar</span>
+                          </>
+                        )}
+                      </button>
+
+                      {ev.archived && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(ev.id)}
+                          aria-label={`Eliminar ${ev.name}`}
+                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-border bg-surface-muted text-text-secondary transition-transform duration-150 hover:border-danger-line hover:text-red-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             ))}

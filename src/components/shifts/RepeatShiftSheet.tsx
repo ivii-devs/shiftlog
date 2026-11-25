@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import {
   formatCurrency,
   formatMonthYearEs,
+  getTodayIsoLocal,
   parseIsoDateLocal,
   toIsoDateLocal,
 } from '../../domain/formatters';
@@ -68,6 +69,16 @@ export const RepeatShiftSheet: React.FC<RepeatShiftSheetProps> = ({
     const next = new Date(viewYear, viewMonth + offset, 1, 12, 0, 0, 0);
     setViewYear(next.getFullYear());
     setViewMonth(next.getMonth());
+  };
+
+  const handleSelectToday = () => {
+    const todayIso = getTodayIsoLocal();
+    const todayDate = parseIsoDateLocal(todayIso);
+    setViewYear(todayDate.getFullYear());
+    setViewMonth(todayDate.getMonth());
+    setSelectedDates((prev) =>
+      prev.includes(todayIso) ? prev : [...prev, todayIso]
+    );
   };
 
   const handleConfirmRepeat = () => {
@@ -136,9 +147,18 @@ export const RepeatShiftSheet: React.FC<RepeatShiftSheetProps> = ({
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
           </button>
-          <span className="text-sm font-semibold text-text">
-            {formatMonthYearEs(viewYear, viewMonth)}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-text">
+              {formatMonthYearEs(viewYear, viewMonth)}
+            </span>
+            <button
+              type="button"
+              onClick={handleSelectToday}
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-border bg-surface-muted px-2.5 text-xs font-medium text-text-secondary transition-transform duration-150 hover:text-text active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Marcar hoy
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => handleChangeMonth(1)}

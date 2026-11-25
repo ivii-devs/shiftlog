@@ -260,7 +260,7 @@ export const PredictionsView: React.FC<PredictionsViewProps> = ({
 
         {!hasAnyGoal ? (
           <div className="mt-3 rounded-md border border-border bg-surface-muted p-3 text-xs text-text-secondary">
-            No hay ninguna meta activa para {analytics.cycle.label}. Puedes configurarla desde el resumen de Turnos o en Ajustes.
+            No hay ninguna meta activa para {analytics.cycle.label}. Puedes configurarla en Ajustes &gt; Ciclo y metas.
           </div>
         ) : (
           <div className="mt-3.5 space-y-3">

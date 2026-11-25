@@ -25,6 +25,7 @@ interface ShiftFormSheetProps {
   onOpenChange: (open: boolean) => void;
   editingShift?: ShiftRecord | null;
   initialDate?: string;
+  onGoToEvents?: () => void;
 }
 
 export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
@@ -32,6 +33,7 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
   onOpenChange,
   editingShift = null,
   initialDate,
+  onGoToEvents,
 }) => {
   const events = useShiftStore((s) => s.events);
   const addShift = useShiftStore((s) => s.addShift);
@@ -255,6 +257,29 @@ export const ShiftFormSheet: React.FC<ShiftFormSheetProps> = ({
       }
     >
       <form id="shift-form" onSubmit={handleSubmit} className="space-y-4">
+        {selectableEvents.length === 0 && (
+          <div className="rounded-md border border-warning-line bg-warning-quiet p-3.5 text-xs text-text">
+            <p className="font-medium text-amber-500">
+              No tienes eventos activos todavía
+            </p>
+            <p className="mt-1 text-text-secondary">
+              Crea primero un evento o trabajo en Ajustes para poder registrar turnos con tu tarifa.
+            </p>
+            {onGoToEvents && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenChange(false);
+                  onGoToEvents();
+                }}
+                className="mt-2.5 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-action px-3.5 text-xs font-semibold text-action-ink transition-transform duration-150 hover:bg-action-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                Ir a Ajustes para crear evento
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Evento y Fecha */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>

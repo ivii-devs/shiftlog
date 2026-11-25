@@ -3,7 +3,6 @@ import { CalendarView } from './components/calendar/CalendarView';
 import { AppShell } from './components/layout/AppShell';
 import type { AppTab } from './components/layout/BottomNav';
 import { SettingsView } from './components/settings/SettingsView';
-import { CycleGoalSheet } from './components/shifts/CycleGoalSheet';
 import { CycleSummaryHero } from './components/shifts/CycleSummaryHero';
 import { QuickTemplatesBar } from './components/shifts/QuickTemplatesBar';
 import { RepeatShiftSheet } from './components/shifts/RepeatShiftSheet';
@@ -30,7 +29,6 @@ export const App: React.FC = () => {
     undefined
   );
 
-  const [goalSheetOpen, setGoalSheetOpen] = useState(false);
   const [repeatSheetOpen, setRepeatSheetOpen] = useState(false);
   const [repeatingShift, setRepeatingShift] = useState<ShiftRecord | null>(null);
 
@@ -123,11 +121,8 @@ export const App: React.FC = () => {
       >
         {activeTab === 'shifts' && (
           <div className="scroll-container flex-1 min-h-0 flex flex-col overflow-y-auto">
-            <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-4 pb-10">
-              <CycleSummaryHero
-                analytics={analytics}
-                onEditGoal={() => setGoalSheetOpen(true)}
-              />
+            <div className="mx-auto w-full max-w-2xl space-y-3.5 px-4 py-3.5 pb-10">
+              <CycleSummaryHero analytics={analytics} />
               <QuickTemplatesBar />
               <ShiftList
                 cycleShifts={cycleShifts}
@@ -168,12 +163,7 @@ export const App: React.FC = () => {
         onOpenChange={setShiftFormOpen}
         editingShift={editingShift}
         initialDate={initialShiftDate}
-      />
-
-      <CycleGoalSheet
-        open={goalSheetOpen}
-        onOpenChange={setGoalSheetOpen}
-        analytics={analytics}
+        onGoToEvents={() => setActiveTab('settings')}
       />
 
       <RepeatShiftSheet

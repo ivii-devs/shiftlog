@@ -78,71 +78,7 @@ export interface UpdateShiftPayload {
   refreshRatesFromEvent?: boolean;
 }
 
-export const DEFAULT_EVENTS: WorkEvent[] = [
-  {
-    id: 'ev-default-1',
-    name: 'Eventos y catering',
-    color: 'emerald',
-    netRate: 12.5,
-    grossRate: 15.0,
-    hasUnpaidBreak: true,
-    defaultBreakMinutes: 30,
-    minGuaranteedHours: 4,
-    roundingMode: 'none',
-    multipliers: {
-      normal: 1.0,
-      holiday: 1.5,
-      night: 1.25,
-      overtime: 1.5,
-    },
-    quickTemplates: [
-      {
-        id: 'tpl-default-1',
-        label: 'Mañana',
-        startTime: '08:00',
-        endTime: '16:30',
-        rateType: 'normal',
-      },
-      {
-        id: 'tpl-default-2',
-        label: 'Tarde',
-        startTime: '16:00',
-        endTime: '00:00',
-        rateType: 'normal',
-      },
-    ],
-    archived: false,
-    createdAt: '2026-01-01T08:00:00.000Z',
-  },
-  {
-    id: 'ev-default-2',
-    name: 'Logística y montaje',
-    color: 'blue',
-    netRate: 14.0,
-    grossRate: 17.5,
-    hasUnpaidBreak: false,
-    defaultBreakMinutes: 0,
-    minGuaranteedHours: 0,
-    roundingMode: '15m',
-    multipliers: {
-      normal: 1.0,
-      holiday: 1.5,
-      night: 1.25,
-      overtime: 1.5,
-    },
-    quickTemplates: [
-      {
-        id: 'tpl-default-3',
-        label: 'Noche',
-        startTime: '22:00',
-        endTime: '06:00',
-        rateType: 'night',
-      },
-    ],
-    archived: false,
-    createdAt: '2026-01-01T08:05:00.000Z',
-  },
-];
+export const DEFAULT_EVENTS: WorkEvent[] = [];
 
 export const DEFAULT_SETTINGS: AppSettings = {
   cycleStartDay: 1,

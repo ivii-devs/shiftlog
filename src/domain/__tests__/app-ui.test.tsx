@@ -5,14 +5,86 @@ import App from '../../App';
 import { PredictionsView } from '../../components/stats/PredictionsView';
 import { computeCycleAnalytics } from '../analytics';
 import { getCycleForDate } from '../cycles';
+import type { WorkEvent } from '../types';
 import { useShiftStore } from '../../store/useShiftStore';
 
-describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
+const TEST_EVENTS: WorkEvent[] = [
+  {
+    id: 'ev-test-1',
+    name: 'Eventos y catering',
+    color: 'emerald',
+    netRate: 12.5,
+    grossRate: 15.0,
+    hasUnpaidBreak: true,
+    defaultBreakMinutes: 30,
+    minGuaranteedHours: 4,
+    roundingMode: 'none',
+    multipliers: {
+      normal: 1.0,
+      holiday: 1.5,
+      night: 1.25,
+      overtime: 1.5,
+    },
+    quickTemplates: [
+      {
+        id: 'tpl-test-1',
+        label: 'Mañana',
+        startTime: '08:00',
+        endTime: '16:30',
+        rateType: 'normal',
+      },
+    ],
+    archived: false,
+    createdAt: '2026-01-01T08:00:00.000Z',
+  },
+  {
+    id: 'ev-test-2',
+    name: 'Logística y montaje',
+    color: 'blue',
+    netRate: 14.0,
+    grossRate: 17.5,
+    hasUnpaidBreak: false,
+    defaultBreakMinutes: 0,
+    minGuaranteedHours: 0,
+    roundingMode: '15m',
+    multipliers: {
+      normal: 1.0,
+      holiday: 1.5,
+      night: 1.25,
+      overtime: 1.5,
+    },
+    quickTemplates: [],
+    archived: false,
+    createdAt: '2026-01-01T08:05:00.000Z',
+  },
+];
+
+describe('App UI integration', () => {
   beforeEach(() => {
-    useShiftStore.getState().resetStoreForTests();
+    useShiftStore.getState().resetStoreForTests({ events: TEST_EVENTS });
   });
 
-  it('registers shifts, removes payment status & duplicate CTA, and edits per-month goals from Turnos (AC01, AC02, AC03, AC04)', async () => {
+  it('starts without mock events and guides user from ShiftFormSheet to Ajustes when empty', async () => {
+    const user = userEvent.setup();
+    useShiftStore.getState().resetStoreForTests();
+
+    render(<App />);
+    expect(useShiftStore.getState().events).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Registrar turno' }));
+    expect(
+      await screen.findByText(/No tienes eventos activos todavía/i)
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: /Ir a Ajustes para crear evento/i })
+    );
+    expect(
+      screen.getByText('Eventos y categorías de trabajo')
+    ).toBeInTheDocument();
+  });
+
+  it('renders compact summary without Edit goal CTA, avoids duplicated totals on 1-shift days, and uses 3 icon-only row actions', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -32,62 +104,65 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     expect(within(summarySection).getByText(/500,00 €/i)).toBeInTheDocument();
     expect(within(summarySection).getByText('Meta base')).toBeInTheDocument();
 
-    // AC04: No "Cobrado / Pendiente" and no duplicate "Registrar turno" button in hero
+    // No duplicate "Registrar turno", no "Editar meta", no "Cobrado / Pendiente"
     expect(
       within(summarySection).queryByRole('button', { name: /Registrar turno/i })
+    ).not.toBeInTheDocument();
+    expect(
+      within(summarySection).queryByRole('button', { name: /Editar meta/i })
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/Cobrado/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Pendiente/i)).not.toBeInTheDocument();
 
-    // AC03: Open quick goal sheet from Turnos and save custom goal (including non-multiple-of-10 & decimal values)
-    await user.click(within(summarySection).getByRole('button', { name: /Editar meta/i }));
-    const eurosInput = (await screen.findByLabelText(
-      /Meta neta del mes/i
-    )) as HTMLInputElement;
-    const hoursInput = screen.getByLabelText(/Meta de horas del mes/i) as HTMLInputElement;
-    await user.clear(eurosInput);
-    await user.type(eurosInput, '425');
-    await user.clear(hoursInput);
-    await user.type(hoursInput, '37.5');
-    expect(eurosInput.checkValidity()).toBe(true);
-    expect(hoursInput.checkValidity()).toBe(true);
-    await user.click(screen.getByRole('button', { name: /Guardar meta de este mes/i }));
-
-    expect(within(summarySection).getByText('Personalizada')).toBeInTheDocument();
-    expect(within(summarySection).getByText(/325,00 €/i)).toBeInTheDocument(); // 425 - 100 = 325
-
-    // Disable goal for this month via quick sheet
-    await user.click(within(summarySection).getByRole('button', { name: /Editar meta/i }));
-    await user.click(
-      await screen.findByRole('button', { name: /Dejar este mes sin meta/i })
-    );
+    // Single shift on today -> 3 icon-only actions (Repetir, Editar, Eliminar) and no Clonar hoy / Duplicar
+    const shiftListSection = screen.getByRole('region', {
+      name: /Listado de turnos del ciclo/i,
+    });
     expect(
-      within(summarySection).getByRole('button', { name: /Configurar meta del mes/i })
+      within(shiftListSection).getAllByText('100,00 €')
+    ).toHaveLength(1);
+    expect(
+      within(shiftListSection).queryByRole('button', { name: /Clonar hoy/i })
+    ).not.toBeInTheDocument();
+    expect(
+      within(shiftListSection).queryByRole('button', { name: /Duplicar/i })
+    ).not.toBeInTheDocument();
+    expect(
+      within(shiftListSection).getByRole('button', { name: 'Repetir turno' })
+    ).toBeInTheDocument();
+    expect(
+      within(shiftListSection).getByRole('button', { name: 'Editar turno' })
+    ).toBeInTheDocument();
+    expect(
+      within(shiftListSection).getByRole('button', { name: 'Eliminar turno' })
     ).toBeInTheDocument();
 
-    // Restore to base goal via quick sheet
+    // Open RepeatShiftSheet, click "Marcar hoy", confirm repeat -> now 2 shifts on same day show daily subtotal
     await user.click(
-      within(summarySection).getByRole('button', { name: /Configurar meta del mes/i })
+      within(shiftListSection).getByRole('button', { name: 'Repetir turno' })
     );
-    await user.click(
-      await screen.findByRole('button', { name: /Restablecer a meta base/i })
-    );
-    expect(within(summarySection).getByText('Meta base')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Marcar hoy' }));
+    await user.click(screen.getByRole('button', { name: /Repetir en 1 día/i }));
 
-    // Clone and duplicate still work
-    await user.click(screen.getByRole('button', { name: /Clonar turno en hoy/i }));
     expect(within(summarySection).getAllByText('200,00 €').length).toBeGreaterThan(0);
+    // Date group header now shows daily subtotal 200,00 € because 2 shifts exist on that day
+    expect(within(shiftListSection).getByText('200,00 €')).toBeInTheDocument();
 
-    const duplicateBtns = screen.getAllByRole('button', { name: /^Duplicar turno$/i });
-    await user.click(duplicateBtns[0]);
-    expect(within(summarySection).getAllByText('300,00 €').length).toBeGreaterThan(0);
+    // Header navigation to previous cycle shows secondary bar "Volver al mes actual"
+    await user.click(screen.getByRole('button', { name: 'Ciclo anterior' }));
+    const returnBtn = screen.getByRole('button', { name: 'Volver al mes actual' });
+    expect(returnBtn).toBeInTheDocument();
+    await user.click(returnBtn);
+    expect(
+      screen.queryByRole('button', { name: 'Volver al mes actual' })
+    ).not.toBeInTheDocument();
   });
 
-  it('shows selected day quick bar and full descending list of worked days in Calendario (AC05, AC06)', async () => {
+  it('shows selected day quick bar and full descending list of worked days in Calendario', async () => {
     const user = userEvent.setup();
     useShiftStore.getState().setCycleForDate('2026-11-15');
     useShiftStore.getState().addShift({
-      eventId: 'ev-default-1',
+      eventId: 'ev-test-1',
       date: '2026-11-05',
       startTime: '08:00',
       endTime: '16:00',
@@ -95,7 +170,7 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
       note: 'Turno inicial',
     });
     useShiftStore.getState().addShift({
-      eventId: 'ev-default-2',
+      eventId: 'ev-test-2',
       date: '2026-11-20',
       startTime: '10:00',
       endTime: '18:00',
@@ -107,48 +182,41 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Calendario' }));
 
-    // Quick bar with button is visible
     expect(
       screen.getByRole('button', { name: /Añadir turno en este día/i })
     ).toBeInTheDocument();
 
-    // Worked days are listed in descending chronological order (2026-11-20 before 2026-11-05)
     const dayCards = document.querySelectorAll('[data-calendar-day]');
     expect(dayCards).toHaveLength(2);
     expect(dayCards[0].getAttribute('data-calendar-day')).toBe('2026-11-20');
     expect(dayCards[1].getAttribute('data-calendar-day')).toBe('2026-11-05');
 
-    // Clicking day 20 highlights its card
     const day20Btn = screen.getByRole('button', { name: /Día 20,/i });
     await user.click(day20Btn);
     expect(dayCards[0].getAttribute('data-selected')).toBe('true');
     expect(dayCards[1].getAttribute('data-selected')).toBe('false');
 
-    // Clicking empty day 12 updates quick bar to "Sin actividad registrada" while keeping worked days list visible
     const day12Btn = screen.getByRole('button', { name: /Día 12,/i });
     await user.click(day12Btn);
     expect(screen.getByText('Sin actividad registrada')).toBeInTheDocument();
     expect(document.querySelectorAll('[data-calendar-day]')).toHaveLength(2);
   });
 
-  it('organizes Estadísticas into 3 sub-views with daily/weekly chart and interactive simulator (AC07, AC08, AC09, AC10)', async () => {
+  it('organizes Estadísticas into 3 sub-views with daily/weekly chart and interactive simulator', async () => {
     const user = userEvent.setup();
-    useShiftStore.getState().addShiftFromTemplate('ev-default-1', 'tpl-default-1');
+    useShiftStore.getState().addShiftFromTemplate('ev-test-1', 'tpl-test-1');
 
     render(<App />);
     await user.click(screen.getByRole('button', { name: 'Estadísticas' }));
 
-    // AC07: ExportReportsCard is NOT in Estadísticas anymore
     expect(
       screen.queryByRole('button', { name: /Exportar Excel \(\.csv\)/i })
     ).not.toBeInTheDocument();
 
-    // Sub-view 1: Mes actual
     expect(screen.getByText('Días trabajados / libres')).toBeInTheDocument();
     expect(screen.getByText('Tarifa media neta real')).toBeInTheDocument();
     expect(screen.getByText('Comparativa Bruto vs. Neto')).toBeInTheDocument();
 
-    // Toggle chart between Por días / Por semanas and Horas / Neto (€)
     const byDaysBtn = screen.getByRole('button', { name: 'Por días' });
     await user.click(byDaysBtn);
     expect(byDaysBtn).toHaveAttribute('aria-pressed', 'true');
@@ -157,13 +225,11 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     await user.click(hoursBtn);
     expect(hoursBtn).toHaveAttribute('aria-pressed', 'true');
 
-    // Sub-view 2: Predicciones & simulator
     await user.click(screen.getByRole('tab', { name: 'Predicciones' }));
     expect(screen.getByText('Devengado hasta hoy')).toBeInTheDocument();
     expect(screen.getByText('Cierre estimado del ciclo')).toBeInTheDocument();
     expect(screen.getByText('Simulador rápido')).toBeInTheDocument();
 
-    // Switch simulator to Turnos extra and select event + holiday multiplier
     await user.click(screen.getByRole('button', { name: 'Turnos extra' }));
     const qtyInput = screen.getByLabelText(/Número de turnos extra/i);
     await user.clear(qtyInput);
@@ -174,17 +240,16 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     await user.type(hoursPerShiftInput, '5');
 
     const rateSourceSelect = screen.getByLabelText(/Tarifa de referencia/i);
-    await user.selectOptions(rateSourceSelect, 'ev-default-2'); // 14 €/h
+    await user.selectOptions(rateSourceSelect, 'ev-test-2');
     const rateTypeSelect = screen.getByLabelText(/Tipo de jornada/i);
-    await user.selectOptions(rateTypeSelect, 'holiday'); // x1.5 = 21 €/h -> 10h * 21 = +210 €
+    await user.selectOptions(rateTypeSelect, 'holiday');
 
     const simSection = screen.getByRole('region', {
       name: /Simulador rápido de horas o turnos extra/i,
     });
     expect(within(simSection).getByText(/\+210,00 €/i)).toBeInTheDocument();
-    expect(within(simSection).getByText('310,00 €')).toBeInTheDocument(); // 100 + 210
+    expect(within(simSection).getByText('310,00 €')).toBeInTheDocument();
 
-    // Sub-view 3: Historial
     await user.click(screen.getByRole('tab', { name: 'Historial' }));
     expect(
       screen.getByText('Evolución intermensual (últimos 6 ciclos)')
@@ -203,7 +268,6 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     expect(within(activitySection).getByText('0 turnos registrados')).toBeInTheDocument();
     unmount();
 
-    // Render PredictionsView on the exact last day of an active cycle (2026-11-30)
     const state = useShiftStore.getState();
     const lastDayAnalytics = computeCycleAnalytics({
       cycle: getCycleForDate('2026-11-30', 1),
@@ -218,21 +282,32 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     expect(screen.queryByText(/Este ciclo ya ha finalizado/i)).not.toBeInTheDocument();
   });
 
-  it('organizes Ajustes into 3 sub-views with per-month goals manager, clean exports and legacy JSON import (AC01, AC02, AC11, AC12)', async () => {
+  it('organizes Ajustes into 3 sub-views, deletes archived events with confirmation, manages per-month goals, and imports legacy JSON', async () => {
     const user = userEvent.setup();
-    useShiftStore.getState().addShiftFromTemplate('ev-default-1', 'tpl-default-1');
+    useShiftStore.getState().addShiftFromTemplate('ev-test-1', 'tpl-test-1');
 
     render(<App />);
     await user.click(screen.getByRole('button', { name: 'Ajustes' }));
 
-    // Sub-view 1: Eventos (default)
+    // Archive and then delete archived event with 2-step confirmation
     expect(screen.getByText('Eventos y categorías de trabajo')).toBeInTheDocument();
     await user.click(
       screen.getByRole('button', { name: /Archivar Logística y montaje/i })
     );
     expect(
-      useShiftStore.getState().events.find((e) => e.id === 'ev-default-2')?.archived
+      useShiftStore.getState().events.find((e) => e.id === 'ev-test-2')?.archived
     ).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: /Archivados \(1\)/i }));
+    await user.click(
+      screen.getByRole('button', { name: /Eliminar Logística y montaje/i })
+    );
+    await user.click(
+      screen.getByRole('button', { name: /Confirmar borrado de Logística y montaje/i })
+    );
+    expect(
+      useShiftStore.getState().events.find((e) => e.id === 'ev-test-2')
+    ).toBeUndefined();
 
     // Sub-view 2: Ciclo y metas
     await user.click(screen.getByRole('tab', { name: 'Ciclo y metas' }));
@@ -240,7 +315,6 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     await user.selectOptions(cycleSelect, '25');
     expect(useShiftStore.getState().settings.cycleStartDay).toBe(25);
 
-    // Configure custom goal for selected month
     const monthEuros = screen.getByLabelText(/Meta neta de /i);
     await user.clear(monthEuros);
     await user.type(monthEuros, '850');
@@ -258,12 +332,10 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     expect(
       screen.getByRole('button', { name: /Copiar resumen al portapapeles/i })
     ).toBeInTheDocument();
-    // No payment filter in exports
     expect(
       screen.queryByLabelText(/Filtrar informe por estado de cobro/i)
     ).not.toBeInTheDocument();
 
-    // Backup import rejects invalid JSON and accepts legacy JSON with paymentStatus
     const fileInput = screen.getByLabelText(
       /Seleccionar archivo JSON de copia de seguridad/i
     );
@@ -285,7 +357,7 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
       version: 1,
       exportedAt: new Date().toISOString(),
       events: currentState.events.map((ev) =>
-        ev.id === 'ev-default-1' ? { ...ev, netRate: 20 } : ev
+        ev.id === 'ev-test-1' ? { ...ev, netRate: 20 } : ev
       ),
       shifts: [legacyShift],
       settings: {
@@ -303,7 +375,7 @@ describe('App UI integration for Feature 02 (AC01 - AC12)', () => {
     );
 
     expect(
-      useShiftStore.getState().events.find((e) => e.id === 'ev-default-1')?.netRate
+      useShiftStore.getState().events.find((e) => e.id === 'ev-test-1')?.netRate
     ).toBe(20);
     expect(useShiftStore.getState().shifts).toHaveLength(2);
     expect(

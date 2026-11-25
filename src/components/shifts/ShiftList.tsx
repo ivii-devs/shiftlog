@@ -131,22 +131,24 @@ export const ShiftList: React.FC<ShiftListProps> = ({
           onAction={cycleShifts.length === 0 ? onOpenNewShift : undefined}
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {groupedByDate.map((group) => (
             <div
               key={group.date}
               className="overflow-hidden rounded-lg border border-border bg-surface"
             >
-              <div className="flex items-center justify-between border-b border-border bg-surface-muted px-4 py-2">
+              <div className="flex items-center justify-between border-b border-border bg-surface-muted px-3.5 py-1.5">
                 <span className="text-xs font-semibold text-text">
                   {formatShortDateEs(group.date)}
                 </span>
-                <span className="font-mono tabular-nums text-xs text-text-secondary">
-                  {formatMinutes(group.totalMinutes)} ·{' '}
-                  <strong className="text-text">
-                    {formatCurrency(group.totalNet)}
-                  </strong>
-                </span>
+                {group.shifts.length > 1 && (
+                  <span className="font-mono tabular-nums text-xs text-text-secondary">
+                    {formatMinutes(group.totalMinutes)} ·{' '}
+                    <strong className="text-text">
+                      {formatCurrency(group.totalNet)}
+                    </strong>
+                  </span>
+                )}
               </div>
 
               <div className="divide-y divide-border">

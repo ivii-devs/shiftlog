@@ -137,7 +137,7 @@ export const DayShiftsPanel: React.FC<DayShiftsPanelProps> = ({
                   }`}
                 >
                   <div
-                    className={`flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5 ${
+                    className={`flex flex-wrap items-center justify-between gap-2 border-b border-border px-3.5 py-2 ${
                       isSelected ? 'bg-selected' : 'bg-surface-muted'
                     }`}
                   >
@@ -151,12 +151,14 @@ export const DayShiftsPanel: React.FC<DayShiftsPanelProps> = ({
                         </span>
                       )}
                     </div>
-                    <span className="font-mono tabular-nums text-xs text-text-secondary">
-                      {formatMinutes(day.totalMinutes)} ·{' '}
-                      <strong className="text-emerald-500">
-                        {formatCurrency(day.totalNet)}
-                      </strong>
-                    </span>
+                    {day.shifts.length > 1 && (
+                      <span className="font-mono tabular-nums text-xs text-text-secondary">
+                        {formatMinutes(day.totalMinutes)} ·{' '}
+                        <strong className="text-emerald-500">
+                          {formatCurrency(day.totalNet)}
+                        </strong>
+                      </span>
+                    )}
                   </div>
 
                   <div className="divide-y divide-border">
